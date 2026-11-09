@@ -1,5 +1,5 @@
 -- +goose Up
--- P0 draft schema for accounts, devices and sync. Sharing and reviews arrive in later migrations.
+-- Schema for accounts, devices and sync. Sharing and reviews arrive in later migrations.
 -- Times are timestamptz in the database and Unix milliseconds on the wire.
 
 create table instance_settings (
@@ -59,6 +59,7 @@ create table refresh_tokens (
     rotated_at   timestamptz                         -- set when exchanged; reuse revokes the device
 );
 create index refresh_tokens_device_idx on refresh_tokens (device_id);
+create index refresh_tokens_expires_idx on refresh_tokens (expires_at);
 
 -- Shared work identities (docs/spec/work-key.md). One row per work across all users.
 create table works (

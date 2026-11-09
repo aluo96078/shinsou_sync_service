@@ -7,7 +7,7 @@ info:
     name: MIT
     identifier: MIT
   description: |
-    P0 draft. Covers what P1 implements: instance discovery, accounts, devices and sync.
+    Covers what the P1 server implements: instance discovery, accounts, devices and sync.
     Sharing and reviews are added in later phases.
 
     Merge rules: docs/spec/sync-semantics.md. Work identity: docs/spec/work-key.md.
@@ -78,6 +78,12 @@ paths:
         '409': { $ref: '#/components/responses/Error' }
         '422': { $ref: '#/components/responses/Error' }
         '429': { $ref: '#/components/responses/Error' }
+      description: |
+        Registration policy comes from the instance (`registration`): `open`, `invite` (an
+        `inviteCode` is required, else 403 `invite_required`) or `closed` (403
+        `registration_closed`). A valid `setupCode` always works and makes the account an
+        administrator; it can be used once. Usernames are lowercase `[a-z0-9_]{3,32}`; logins
+        match them case-insensitively. 409 is `username_taken` or `email_taken`.
 
   /api/v1/auth/login:
     post:
@@ -96,6 +102,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Session' }
         '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
         '429': { $ref: '#/components/responses/Error' }
 
   /api/v1/auth/refresh:
@@ -122,6 +129,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Tokens' }
         '401': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/Error' }
 
   /api/v1/auth/logout:
     post:
@@ -219,9 +227,20 @@ paths:
       tags: [sync]
       operationId: syncPush
       description: |
-        Merges a batch of records. At most 500 records and 1 MiB per request. Records are merged
-        one by one; a rejected record does not fail the batch. Resending the same `batchId`
-        within 24 hours returns the stored response without merging again.
+        Merges a batch of records inside one transaction. At most 500 records, 500 works and 1 MiB
+        per request (413 `payload_too_large`). Records are merged one by one; a rejected record
+        does not fail the batch. Resending the same `batchId` within 24 hours returns the stored
+        response without merging again.
+
+        Work descriptors in `works` are validated first and fail the whole request: 422
+        `invalid_work_key` or `work_hash_mismatch`. A record keyed by a work hash needs its work
+        in `works` or already on the server, else it is rejected with `rejected:unknown_work`.
+        A `unit` record must carry `work` and `unitRemoteId`; the server recomputes the key and
+        rejects the record with `rejected:invalid_key` when it differs.
+
+        `since` is the client's pull cursor. A non-zero `since` below the account's tombstone
+        floor answers 410 `resync_required` and nothing is merged. `since: 0` is always accepted.
+        Pushes are limited per account (429 `rate_limited`).
       requestBody:
         required: true
         content:
@@ -233,6 +252,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/PushResponse' }
+        '400': { $ref: '#/components/responses/Error' }
         '401': { $ref: '#/components/responses/Error' }
         '410': { $ref: '#/components/responses/Error' }
         '413': { $ref: '#/components/responses/Error' }
@@ -243,6 +263,11 @@ paths:
     get:
       tags: [sync]
       operationId: syncChanges
+      description: |
+        Full record states with `seq > since`, ascending. Pages hold at most 500 records;
+        `nextSince` is the seq of the last record returned (or `since` when there are none).
+        A non-zero `since` below the tombstone floor answers 410; `since=0` always works and is
+        how a client recovers from 410.
       parameters:
         - name: since
           in: query
@@ -258,6 +283,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ChangesResponse' }
+        '400': { $ref: '#/components/responses/Error' }
         '401': { $ref: '#/components/responses/Error' }
         '410':
           description: since is older than the tombstone floor; pull again from 0.
@@ -273,7 +299,11 @@ paths:
         WebSocket upgrade, or `text/event-stream` when the client sends
         `Accept: text/event-stream`. The server only sends `{"seq": <latest>}` messages; clients
         pull /sync/changes when the value is greater than their cursor. Browsers that cannot set
-        headers pass the access token as the `Sec-WebSocket-Protocol` value `bearer.<token>`.
+        headers pass the access token as the `Sec-WebSocket-Protocol` value `bearer.<token>`;
+        the server echoes that value as the chosen subprotocol. The server sends the current
+        `{"seq": N}` right after connecting, then again whenever a push changes the account.
+        The connection ends when the device is signed out. Access tokens are checked once when
+        the stream opens.
       responses:
         '101': { description: WebSocket established. }
         '200':
@@ -319,6 +349,7 @@ components:
                 - invite_required
                 - not_found
                 - username_taken
+                - email_taken
                 - validation_failed
                 - invalid_work_key
                 - work_hash_mismatch

@@ -1,0 +1,46 @@
+# Shinsou sync server + PostgreSQL.
+#
+#   cp .env.example .env     # set POSTGRES_PASSWORD and SHINSOU_PUBLIC_URL
+#   docker compose up -d
+#   docker compose logs server | grep setup_code    # one-time administrator setup code
+#
+# Put a TLS-terminating reverse proxy (Caddy, nginx) in front of port 8080 and list its
+# address in SHINSOU_TRUSTED_PROXIES so rate limiting sees the real client IP.
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: shinsou
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: shinsou
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U shinsou -d shinsou"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  server:
+    build:
+      context: ..
+    image: shinsou-sync-server:local
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      SHINSOU_DATABASE_URL: postgres://shinsou:${POSTGRES_PASSWORD}@db:5432/shinsou?sslmode=disable
+      SHINSOU_LISTEN: 0.0.0.0:8080
+      SHINSOU_PUBLIC_URL: ${SHINSOU_PUBLIC_URL:-http://localhost:8080}
+      SHINSOU_REGISTRATION: ${SHINSOU_REGISTRATION:-invite}
+      SHINSOU_EMAIL_VERIFICATION: ${SHINSOU_EMAIL_VERIFICATION:-disabled}
+      SHINSOU_INSTANCE_NAME: ${SHINSOU_INSTANCE_NAME:-Shinsou Sync}
+      SHINSOU_TRUSTED_PROXIES: ${SHINSOU_TRUSTED_PROXIES:-}
+      SHINSOU_RECORD_QUOTA: ${SHINSOU_RECORD_QUOTA:-200000}
+    ports:
+      - "127.0.0.1:8080:8080"
+
+volumes:
+  db-data:

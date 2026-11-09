@@ -90,7 +90,7 @@
 ## 7. 墓碑清理與 410
 
 - `deleted.value = true` 且最後一次變更超過 **90 天** 的記錄，由背景工作永久刪除；同時把 `users.sync_floor_seq` 提高到被刪記錄中最大的 `seq`。
-- `since < sync_floor_seq` 的拉取請求回 `410 resync_required`。推送時也帶上 `since`，同樣檢查。
+- `since != 0` 且 `since < sync_floor_seq` 的拉取請求回 `410 resync_required`。推送時也帶上 `since`，同樣檢查。`since = 0`（完整拉取）永遠不回 410，否則清理後的新裝置將無法開始同步。
 - 用戶端收到 410 時：
   1. 從 `since=0` 重新完整拉取。
   2. 本機有、伺服器沒有、且**上次成功同步後未曾修改**的記錄，視為已在其他裝置刪除，於本機刪除。
