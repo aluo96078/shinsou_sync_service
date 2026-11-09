@@ -1,0 +1,568 @@
+openapi: 3.1.0
+info:
+  title: Shinsou Sync API
+  version: 1.0.0-draft
+  summary: Account, device and metadata sync API for Shinsou X.
+  license:
+    name: MIT
+    identifier: MIT
+  description: |
+    P0 draft. Covers what P1 implements: instance discovery, accounts, devices and sync.
+    Sharing and reviews are added in later phases.
+
+    Merge rules: docs/spec/sync-semantics.md. Work identity: docs/spec/work-key.md.
+    Record fields: docs/spec/records.md.
+
+    Every request from the app sends `Shinsou-Api-Version: 1`. A server that cannot serve that
+    version answers 426 with error code `unsupported_api_version`.
+
+servers:
+  - url: https://sync.example.com
+
+tags:
+  - name: instance
+  - name: auth
+  - name: devices
+  - name: sync
+
+security:
+  - bearer: []
+
+paths:
+  /.well-known/shinsou:
+    get:
+      tags: [instance]
+      operationId: getInstance
+      security: []
+      summary: Instance information shown before sign-in.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Instance' }
+
+  /healthz:
+    get:
+      tags: [instance]
+      operationId: health
+      security: []
+      responses:
+        '200':
+          description: The server and its database are reachable.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status: { type: string, const: ok }
+
+  /api/v1/auth/register:
+    post:
+      tags: [auth]
+      operationId: register
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RegisterRequest' }
+      responses:
+        '201':
+          description: Account created and this device signed in.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Session' }
+        '403': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/Error' }
+
+  /api/v1/auth/login:
+    post:
+      tags: [auth]
+      operationId: login
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginRequest' }
+      responses:
+        '200':
+          description: Signed in; a new device record was created.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Session' }
+        '401': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/Error' }
+
+  /api/v1/auth/refresh:
+    post:
+      tags: [auth]
+      operationId: refresh
+      security: []
+      description: |
+        Rotates the refresh token. Reusing an already rotated token revokes the whole device
+        session and answers 401 `refresh_token_reused`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken: { type: string }
+      responses:
+        '200':
+          description: New token pair.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Tokens' }
+        '401': { $ref: '#/components/responses/Error' }
+
+  /api/v1/auth/logout:
+    post:
+      tags: [auth]
+      operationId: logout
+      description: Signs out the calling device and revokes its refresh token.
+      responses:
+        '204': { description: Signed out. }
+        '401': { $ref: '#/components/responses/Error' }
+
+  /api/v1/me:
+    get:
+      tags: [auth]
+      operationId: getMe
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '401': { $ref: '#/components/responses/Error' }
+
+  /api/v1/me/password:
+    post:
+      tags: [auth]
+      operationId: changePassword
+      description: Changes the password and signs out every other device.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [currentPassword, newPassword]
+              properties:
+                currentPassword: { type: string }
+                newPassword: { type: string, minLength: 8, maxLength: 256 }
+      responses:
+        '204': { description: Changed. }
+        '401': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+
+  /api/v1/devices:
+    get:
+      tags: [devices]
+      operationId: listDevices
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [devices]
+                properties:
+                  devices:
+                    type: array
+                    items: { $ref: '#/components/schemas/Device' }
+        '401': { $ref: '#/components/responses/Error' }
+
+  /api/v1/devices/{deviceId}:
+    parameters:
+      - name: deviceId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    patch:
+      tags: [devices]
+      operationId: renameDevice
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, minLength: 1, maxLength: 64 }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Device' }
+        '404': { $ref: '#/components/responses/Error' }
+    delete:
+      tags: [devices]
+      operationId: signOutDevice
+      responses:
+        '204': { description: The device is signed out. }
+        '404': { $ref: '#/components/responses/Error' }
+
+  /api/v1/sync/push:
+    post:
+      tags: [sync]
+      operationId: syncPush
+      description: |
+        Merges a batch of records. At most 500 records and 1 MiB per request. Records are merged
+        one by one; a rejected record does not fail the batch. Resending the same `batchId`
+        within 24 hours returns the stored response without merging again.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PushRequest' }
+      responses:
+        '200':
+          description: Per-record outcome.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PushResponse' }
+        '401': { $ref: '#/components/responses/Error' }
+        '410': { $ref: '#/components/responses/Error' }
+        '413': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/Error' }
+
+  /api/v1/sync/changes:
+    get:
+      tags: [sync]
+      operationId: syncChanges
+      parameters:
+        - name: since
+          in: query
+          required: true
+          description: Exclusive. 0 pulls everything.
+          schema: { type: integer, format: int64, minimum: 0 }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 500, default: 500 }
+      responses:
+        '200':
+          description: Records with seq > since, ascending.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ChangesResponse' }
+        '401': { $ref: '#/components/responses/Error' }
+        '410':
+          description: since is older than the tombstone floor; pull again from 0.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /api/v1/sync/stream:
+    get:
+      tags: [sync]
+      operationId: syncStream
+      description: |
+        WebSocket upgrade, or `text/event-stream` when the client sends
+        `Accept: text/event-stream`. The server only sends `{"seq": <latest>}` messages; clients
+        pull /sync/changes when the value is greater than their cursor. Browsers that cannot set
+        headers pass the access token as the `Sec-WebSocket-Protocol` value `bearer.<token>`.
+      responses:
+        '101': { description: WebSocket established. }
+        '200':
+          description: Server-sent events.
+          content:
+            text/event-stream:
+              schema: { type: string }
+        '401': { $ref: '#/components/responses/Error' }
+
+components:
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  responses:
+    Error:
+      description: Error
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              description: Stable machine-readable code; message is for humans and may change.
+              enum:
+                - bad_request
+                - unauthorized
+                - invalid_credentials
+                - refresh_token_reused
+                - forbidden
+                - registration_closed
+                - invite_required
+                - not_found
+                - username_taken
+                - validation_failed
+                - invalid_work_key
+                - work_hash_mismatch
+                - payload_too_large
+                - quota_exceeded
+                - rate_limited
+                - resync_required
+                - unsupported_api_version
+                - internal
+            message: { type: string }
+            retryAfterSeconds: { type: integer }
+
+    Instance:
+      type: object
+      required: [name, version, apiVersions, registration, emailVerification, features]
+      properties:
+        name: { type: string }
+        description: { type: string }
+        version: { type: string, description: Server software version. }
+        apiVersions:
+          type: object
+          required: [min, max]
+          properties:
+            min: { type: integer }
+            max: { type: integer }
+        registration: { type: string, enum: [open, invite, closed] }
+        emailVerification: { type: string, enum: [disabled, optional, required] }
+        termsUrl: { type: [string, 'null'], format: uri }
+        privacyUrl: { type: [string, 'null'], format: uri }
+        contact: { type: [string, 'null'] }
+        features:
+          type: object
+          required: [sharing, reviews]
+          properties:
+            sharing: { type: boolean }
+            reviews: { type: boolean }
+
+    DeviceInfo:
+      type: object
+      required: [name, platform]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 64 }
+        platform: { type: string, enum: [android, ios, desktop, web] }
+        appVersion: { type: string, maxLength: 64 }
+
+    RegisterRequest:
+      type: object
+      required: [username, password, device]
+      properties:
+        username: { type: string, pattern: '^[a-z0-9_]{3,32}$' }
+        password: { type: string, minLength: 8, maxLength: 256 }
+        email: { type: [string, 'null'], format: email }
+        inviteCode: { type: [string, 'null'] }
+        setupCode:
+          type: [string, 'null']
+          description: One-time code printed by the server on first start; makes this account the administrator.
+        device: { $ref: '#/components/schemas/DeviceInfo' }
+
+    LoginRequest:
+      type: object
+      required: [username, password, device]
+      properties:
+        username: { type: string }
+        password: { type: string }
+        device: { $ref: '#/components/schemas/DeviceInfo' }
+
+    Tokens:
+      type: object
+      required: [accessToken, accessTokenExpiresAt, refreshToken]
+      properties:
+        accessToken: { type: string }
+        accessTokenExpiresAt: { type: integer, format: int64, description: Unix milliseconds. }
+        refreshToken: { type: string }
+
+    Session:
+      allOf:
+        - $ref: '#/components/schemas/Tokens'
+        - type: object
+          required: [user, device]
+          properties:
+            user: { $ref: '#/components/schemas/User' }
+            device: { $ref: '#/components/schemas/Device' }
+
+    User:
+      type: object
+      required: [id, username, role, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        username: { type: string }
+        handle:
+          type: string
+          description: '`@username@host`, reserved for future federation.'
+        email: { type: [string, 'null'] }
+        emailVerified: { type: boolean }
+        role: { type: string, enum: [user, moderator, admin] }
+        createdAt: { type: integer, format: int64 }
+
+    Device:
+      type: object
+      required: [id, syncDeviceId, name, platform, createdAt, lastSeenAt, current]
+      properties:
+        id: { type: string, format: uuid }
+        syncDeviceId:
+          type: string
+          pattern: '^[A-Za-z0-9_-]{1,64}$'
+          description: The device id to use inside HLC timestamps. Unique within the account.
+        name: { type: string }
+        platform: { type: string }
+        appVersion: { type: [string, 'null'] }
+        createdAt: { type: integer, format: int64 }
+        lastSeenAt: { type: integer, format: int64 }
+        current: { type: boolean, description: True for the device making the request. }
+
+    Hlc:
+      type: string
+      pattern: '^(0|[1-9][0-9]{0,15}):(0|[1-9][0-9]{0,9}):[A-Za-z0-9_-]{1,64}$'
+
+    RecordKind:
+      type: string
+      enum: [library, unit, progress, history, category, repository, setting]
+
+    DeletedRegister:
+      type: object
+      required: [value, clock]
+      properties:
+        value: { type: boolean }
+        clock: { $ref: '#/components/schemas/Hlc' }
+
+    WorkDescriptor:
+      type: object
+      required: [keyVersion, packageId, sourceId, remoteId, hash, title, contentKind]
+      properties:
+        keyVersion: { type: integer, const: 1 }
+        packageId: { type: string }
+        sourceId: { type: string }
+        remoteId: { type: string }
+        hash: { type: string, pattern: '^[0-9a-f]{64}$' }
+        title: { type: string, minLength: 1, maxLength: 512 }
+        author: { type: [string, 'null'] }
+        coverUrl: { type: [string, 'null'], format: uri }
+        contentKind: { type: string, enum: [manga, novel] }
+        language: { type: [string, 'null'] }
+        sourceName: { type: [string, 'null'] }
+        repositoryUrl: { type: [string, 'null'], format: uri }
+
+    PushRecord:
+      type: object
+      required: [kind, key]
+      properties:
+        kind: { $ref: '#/components/schemas/RecordKind' }
+        key: { type: string, maxLength: 2048 }
+        work:
+          type: string
+          pattern: '^[0-9a-f]{64}$'
+          description: Required for `unit` records; the parent work hash.
+        unitRemoteId:
+          type: string
+          description: Required for `unit` records; the server recomputes `key` from it.
+        fields:
+          type: object
+          additionalProperties: true
+        clocks:
+          type: object
+          additionalProperties: { $ref: '#/components/schemas/Hlc' }
+        deleted: { $ref: '#/components/schemas/DeletedRegister' }
+
+    PushRequest:
+      type: object
+      required: [batchId, since, records]
+      properties:
+        batchId: { type: string, format: uuid }
+        since:
+          type: integer
+          format: int64
+          description: The client's pull cursor; checked against the tombstone floor.
+        works:
+          type: array
+          maxItems: 500
+          items: { $ref: '#/components/schemas/WorkDescriptor' }
+        records:
+          type: array
+          maxItems: 500
+          items: { $ref: '#/components/schemas/PushRecord' }
+
+    PushResult:
+      type: object
+      required: [kind, key, result]
+      properties:
+        kind: { $ref: '#/components/schemas/RecordKind' }
+        key: { type: string }
+        result:
+          type: string
+          enum:
+            - applied
+            - unchanged
+            - rejected:missing_clock
+            - rejected:invalid_clock
+            - rejected:invalid_record
+            - rejected:clock_skew
+            - rejected:invalid_key
+            - rejected:unknown_work
+            - rejected:quota_exceeded
+        record:
+          description: The merged state, present unless rejected.
+          $ref: '#/components/schemas/SyncRecord'
+
+    PushResponse:
+      type: object
+      required: [results, seq]
+      properties:
+        results:
+          type: array
+          items: { $ref: '#/components/schemas/PushResult' }
+        seq:
+          type: integer
+          format: int64
+          description: The account's latest seq after this batch.
+
+    SyncRecord:
+      type: object
+      required: [kind, key, seq, fields, clocks]
+      properties:
+        kind: { $ref: '#/components/schemas/RecordKind' }
+        key: { type: string }
+        seq: { type: integer, format: int64 }
+        work:
+          description: Present for records keyed by a work hash, and for unit records.
+          $ref: '#/components/schemas/WorkDescriptor'
+        unitRemoteId: { type: string }
+        fields:
+          type: object
+          additionalProperties: true
+        clocks:
+          type: object
+          additionalProperties: { $ref: '#/components/schemas/Hlc' }
+        deleted: { $ref: '#/components/schemas/DeletedRegister' }
+        cleared: { $ref: '#/components/schemas/Hlc' }
+
+    ChangesResponse:
+      type: object
+      required: [records, nextSince, hasMore]
+      properties:
+        records:
+          type: array
+          items: { $ref: '#/components/schemas/SyncRecord' }
+        nextSince: { type: integer, format: int64 }
+        hasMore: { type: boolean }
