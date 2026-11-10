@@ -17,6 +17,7 @@ import { loadInstance } from '@/stores/instance'
 
 const REGISTRATIONS: readonly Registration[] = ['open', 'invite', 'closed']
 const VERIFICATIONS: readonly EmailVerification[] = ['disabled', 'optional', 'required']
+const SHARING: readonly InstanceSettings['sharing'][] = ['enabled', 'disabled']
 
 const settings = ref<AdminSettings | null>(null)
 const loadError = ref<string | null>(null)
@@ -32,6 +33,7 @@ const form = reactive({
   termsUrl: '',
   privacyUrl: '',
   contact: '',
+  sharing: 'enabled' as InstanceSettings['sharing'],
 })
 
 function fillForm(v: InstanceSettings): void {
@@ -42,6 +44,7 @@ function fillForm(v: InstanceSettings): void {
   form.termsUrl = v.termsUrl ?? ''
   form.privacyUrl = v.privacyUrl ?? ''
   form.contact = v.contact ?? ''
+  form.sharing = v.sharing
 }
 
 function apply(s: AdminSettings): void {
@@ -69,6 +72,8 @@ function defaultText(key: keyof InstanceSettings): string {
       return t(`registration.${d.registration}`)
     case 'emailVerification':
       return t(`emailVerification.${d.emailVerification}`)
+    case 'sharing':
+      return t(`sharing.${d.sharing}`)
     default:
       return d[key] ? String(d[key]) : t('admin.settings.empty')
   }
@@ -92,6 +97,7 @@ async function save(): Promise<void> {
   if (form.termsUrl !== (v.termsUrl ?? '')) patch.termsUrl = form.termsUrl
   if (form.privacyUrl !== (v.privacyUrl ?? '')) patch.privacyUrl = form.privacyUrl
   if (form.contact !== (v.contact ?? '')) patch.contact = form.contact
+  if (form.sharing !== v.sharing) patch.sharing = form.sharing
   if (Object.keys(patch).length === 0) {
     saved.value = t('admin.settings.noChanges')
     return
@@ -174,6 +180,14 @@ async function reset(key: keyof InstanceSettings): Promise<void> {
       <SettingRow :label="$t('admin.settings.contact')" :overridden="isOverridden('contact')" :default-text="defaultText('contact')" :busy="resetAction.busy.value" @reset="reset('contact')">
         <template #default="{ id, describedby }">
           <input :id="id" v-model="form.contact" type="text" maxlength="200" :aria-describedby="describedby" />
+        </template>
+      </SettingRow>
+
+      <SettingRow :label="$t('admin.settings.sharing')" :overridden="isOverridden('sharing')" :default-text="defaultText('sharing')" :hint="$t('admin.settings.sharingHint')" :busy="resetAction.busy.value" @reset="reset('sharing')">
+        <template #default="{ id, describedby }">
+          <select :id="id" v-model="form.sharing" :aria-describedby="describedby">
+            <option v-for="s in SHARING" :key="s" :value="s">{{ $t(`sharing.${s}`) }}</option>
+          </select>
         </template>
       </SettingRow>
 

@@ -908,3 +908,78 @@ pre.json {
     transition: background-color 0.12s ease, border-color 0.12s ease, width 0.2s ease;
   }
 }
+
+/* --- sharing --------------------------------------------------------------------------------- */
+.subnav button {
+  padding: var(--space-2) var(--space-3);
+  font: inherit;
+  color: var(--text-muted);
+  background: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  cursor: pointer;
+}
+.subnav button:hover {
+  color: var(--text);
+}
+.subnav button[aria-pressed='true'] {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+  font-weight: 600;
+}
+.share-list,
+.user-list {
+  list-style: none;
+  margin: 0 0 var(--space-4);
+  padding: 0;
+}
+.share-card {
+  display: grid;
+  grid-template-columns: 5.5rem minmax(0, 1fr);
+  gap: var(--space-4);
+  margin-bottom: var(--space-3);
+}
+.share-title {
+  margin: 0;
+  font-size: var(--text-lg, 1.125rem);
+  overflow-wrap: anywhere;
+}
+.share-body > p {
+  margin: var(--space-1) 0;
+}
+.share-message {
+  margin: var(--space-2) 0;
+  padding: var(--space-2) var(--space-3);
+  border-left: 3px solid var(--border);
+  background: var(--surface-2);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.share-url {
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+.user-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--border);
+}
+.user-row:last-child {
+  border-bottom: 0;
+}
+.pick-list {
+  max-height: 14rem;
+  overflow-y: auto;
+  margin: 0 0 var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius, 0.5rem);
+}
+.pick-list .check {
+  margin: var(--space-1) 0;
+}

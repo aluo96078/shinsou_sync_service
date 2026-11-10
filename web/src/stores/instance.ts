@@ -24,6 +24,7 @@ export function loadInstance(force = false): Promise<void> {
 // Fields an older server does not send are treated as absent / false.
 export const setupPending = computed(() => instance.value?.setupPending === true)
 export const emailFeature = computed(() => instance.value?.features?.email === true)
+export const sharingFeature = computed(() => instance.value?.features?.sharing === true)
 export const registrationMode = computed(() => instance.value?.registration ?? 'open')
 export const verificationPolicy = computed(() => instance.value?.emailVerification ?? 'disabled')
 /** Whether the register page should be offered. */

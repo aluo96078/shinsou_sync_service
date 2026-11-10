@@ -6,7 +6,9 @@ import { getLibraryEntry, listCategories } from '@/api/endpoints'
 import type { Category, LibraryDetail } from '@/api/types'
 import CoverImage from '@/components/CoverImage.vue'
 import ErrorNote from '@/components/ErrorNote.vue'
+import ShareDialog from '@/components/ShareDialog.vue'
 import UnverifiedNotice from '@/components/UnverifiedNotice.vue'
+import { sharingFeature } from '@/stores/instance'
 import { errorMessage, formatDate, formatDateTime, formatNumber, formatPercent, t } from '@/i18n'
 
 const CHUNK = 200
@@ -29,6 +31,16 @@ const readFilter = ref<'all' | 'read' | 'unread'>('all')
 const bookmarkedOnly = ref(false)
 const visible = ref(CHUNK)
 
+// Entries imported from local files have no work descriptor and cannot be shared.
+const shareWork = computed(() => (sharingFeature.value ? (detail.value?.work?.hash ?? null) : null))
+const sharing = ref(false)
+const shareNotice = ref<string | null>(null)
+
+function onShared(username: string): void {
+  sharing.value = false
+  shareNotice.value = t('share.sent', { username })
+}
+
 let seq = 0
 async function load(): Promise<void> {
   const mine = ++seq
@@ -37,6 +49,8 @@ async function load(): Promise<void> {
   notFound.value = false
   unverified.value = false
   detail.value = null
+  sharing.value = false
+  shareNotice.value = null
   try {
     const [d, c] = await Promise.all([
       getLibraryEntry(key.value),
@@ -125,6 +139,10 @@ function yesNo(v: boolean): string {
             <span v-if="detail.local" class="badge badge-warn">{{ $t('detail.local') }}</span>
           </p>
           <p v-if="detail.local" class="hint">{{ $t('detail.localHint') }}</p>
+          <p v-if="shareWork">
+            <button type="button" class="btn" @click="sharing = true; shareNotice = null">{{ $t('share.button') }}</button>
+          </p>
+          <ErrorNote :message="shareNotice" kind="success" />
 
           <div v-if="progression !== null" style="margin: 1rem 0">
             <p style="margin-bottom: 0.25rem">
@@ -219,6 +237,15 @@ function yesNo(v: boolean): string {
           </div>
         </template>
       </section>
+
+      <ShareDialog
+        v-if="shareWork"
+        :open="sharing"
+        :work="shareWork"
+        :title="detail.title || $t('common.unknown')"
+        @close="sharing = false"
+        @shared="onShared"
+      />
     </template>
   </div>
 </template>

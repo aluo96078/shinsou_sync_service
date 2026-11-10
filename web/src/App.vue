@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { computed, ref, watchEffect } from 'vue'
+import { computed, ref, watch, watchEffect } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { logout } from '@/api/auth'
 import { session } from '@/api/session'
-import { LOCALES, LOCALE_NAMES, errorMessage, locale, setLocale, t, type Locale, type MessageKey } from '@/i18n'
+import { LOCALES, LOCALE_NAMES, errorMessage, formatNumber, locale, setLocale, t, type Locale, type MessageKey } from '@/i18n'
 import { THEMES, setTheme, theme, type ThemeChoice } from '@/stores/theme'
-import { instanceName, verificationPolicy } from '@/stores/instance'
+import { instanceName, sharingFeature, verificationPolicy } from '@/stores/instance'
+import { clearPendingShares, pendingShares, refreshPendingShares } from '@/stores/shares'
 import { useResendVerification } from '@/lib/useResend'
 
 const route = useRoute()
@@ -23,6 +24,9 @@ const titleKeys: Record<string, MessageKey> = {
   library: 'library.title',
   account: 'account.title',
   devices: 'devices.title',
+  shares: 'social.nav.inbox',
+  'shares-sent': 'social.nav.sent',
+  people: 'social.nav.people',
   admin: 'admin.title',
   'admin-users': 'admin.nav.users',
   'admin-invites': 'admin.nav.invites',
@@ -35,6 +39,17 @@ watchEffect(() => {
   const key = typeof route.name === 'string' ? titleKeys[route.name] : undefined
   document.title = key ? `${t(key)} · ${instanceName.value}` : instanceName.value
 })
+
+// Badge for unanswered shares: reloaded on sign-in, when the feature is switched, and on every
+// navigation (cheap, and the web has no push channel).
+watch(
+  [() => user.value?.id, sharingFeature, () => route.fullPath],
+  ([id, on]) => {
+    if (id && on) void refreshPendingShares()
+    else clearPendingShares()
+  },
+  { immediate: true },
+)
 
 // Unverified-email banner: shown while the policy asks for verification and the address is open.
 const showBanner = computed(() => {
@@ -77,6 +92,10 @@ function onTheme(e: Event): void {
       <RouterLink class="brand" to="/">{{ instanceName }}</RouterLink>
       <nav v-if="user" class="mainnav" :aria-label="t('nav.main')">
         <RouterLink :to="{ name: 'library' }">{{ t('nav.library') }}</RouterLink>
+        <RouterLink v-if="sharingFeature" :to="{ name: 'shares' }" :class="{ 'router-link-active': route.name === 'people' }">
+          {{ t('nav.sharing') }}
+          <span v-if="pendingShares > 0" class="badge badge-accent" :aria-label="t('nav.pendingShares', { n: pendingShares })">{{ formatNumber(pendingShares) }}</span>
+        </RouterLink>
         <RouterLink :to="{ name: 'devices' }">{{ t('nav.devices') }}</RouterLink>
         <RouterLink :to="{ name: 'account' }">{{ t('nav.account') }}</RouterLink>
         <RouterLink v-if="isAdmin" :to="{ name: 'admin' }">{{ t('nav.admin') }}</RouterLink>

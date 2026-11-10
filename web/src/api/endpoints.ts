@@ -14,8 +14,16 @@ import type {
   LibraryDetail,
   LibraryPage,
   Paged,
+  ReceiveFrom,
+  Share,
+  SharePage,
+  ShareRequest,
+  ShareStatus,
+  SharingPreferences,
   Usage,
   User,
+  UserList,
+  UserPage,
   WebLoginRequest,
   WebRegisterRequest,
   WebSession,
@@ -98,6 +106,51 @@ export const getLibraryEntry = (key: string) =>
   json<LibraryDetail>('GET', `${V1}/library/${encodeURIComponent(key)}`)
 
 export const listCategories = () => json<{ categories: Category[] }>('GET', `${V1}/categories`)
+
+// --- social: people ---------------------------------------------------------------------------
+
+const userPath = (list: 'following' | 'blocks', id: string) =>
+  `${V1}/me/${list}/${encodeURIComponent(id)}`
+
+export const searchUsers = (q: string, limit?: number, signal?: AbortSignal) =>
+  json<UserList>('GET', `${V1}/users`, signal ? { query: { q, limit }, signal } : { query: { q, limit } })
+
+export type Relation = 'following' | 'followers' | 'blocks'
+
+export const listRelation = (relation: Relation, query: { offset?: number; limit?: number }) =>
+  json<UserPage>('GET', `${V1}/me/${relation}`, { query: { ...query } })
+
+export const followUser = (id: string) => noContent('PUT', userPath('following', id))
+export const unfollowUser = (id: string) => noContent('DELETE', userPath('following', id))
+export const blockUser = (id: string) => noContent('PUT', userPath('blocks', id))
+export const unblockUser = (id: string) => noContent('DELETE', userPath('blocks', id))
+
+export const getSharingPreferences = () => json<SharingPreferences>('GET', `${V1}/me/sharing`)
+
+export const setSharingPreferences = (receiveFrom: ReceiveFrom) =>
+  json<SharingPreferences>('PUT', `${V1}/me/sharing`, { body: { receiveFrom } })
+
+// --- social: shares ---------------------------------------------------------------------------
+
+export interface ShareQuery {
+  box?: 'inbox' | 'sent'
+  status?: ShareStatus
+  offset?: number
+  limit?: number
+}
+
+export const listShares = (query: ShareQuery) =>
+  json<SharePage>('GET', `${V1}/shares`, { query: { ...query } })
+
+export const createShare = (body: ShareRequest) => json<Share>('POST', `${V1}/shares`, { body })
+
+export const getShareSummary = () => json<{ pending: number }>('GET', `${V1}/shares/summary`)
+
+const sharePath = (id: string) => `${V1}/shares/${encodeURIComponent(id)}`
+
+export const acceptShare = (id: string) => json<Share>('POST', `${sharePath(id)}/accept`)
+export const dismissShare = (id: string) => json<Share>('POST', `${sharePath(id)}/dismiss`)
+export const deleteShare = (id: string) => noContent('DELETE', sharePath(id))
 
 // --- admin -----------------------------------------------------------------------------------
 
