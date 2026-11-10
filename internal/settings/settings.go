@@ -31,6 +31,8 @@ type Values struct {
 	PrivacyURL        string
 	Contact           string
 	Sharing           string // config.SharingEnabled or config.SharingDisabled
+	Reviews           string // config.Enabled or config.Disabled
+	VisitorBrowsing   string // config.Enabled or config.Disabled
 }
 
 // keys maps the JSON name used by the API to the instance_settings key.
@@ -43,6 +45,8 @@ var keys = []struct{ api, db string }{
 	{"privacyUrl", "privacy_url"},
 	{"contact", "contact"},
 	{"sharing", "sharing"},
+	{"reviews", "reviews"},
+	{"visitorBrowsing", "visitor_browsing"},
 }
 
 func dbKey(api string) (string, bool) {
@@ -72,6 +76,10 @@ func (v *Values) field(db string) *string {
 		return &v.Contact
 	case "sharing":
 		return &v.Sharing
+	case "reviews":
+		return &v.Reviews
+	case "visitor_browsing":
+		return &v.VisitorBrowsing
 	}
 	return nil
 }
@@ -92,7 +100,8 @@ type Store struct {
 // New creates a store whose defaults come from cfg. Call Load before use.
 func New(pool *pgxpool.Pool, cfg config.Config) *Store {
 	d := Values{Name: cfg.InstanceName, Description: cfg.InstanceDescription, Registration: cfg.Registration,
-		EmailVerification: cfg.EmailVerification, TermsURL: cfg.TermsURL, PrivacyURL: cfg.PrivacyURL, Contact: cfg.Contact, Sharing: cfg.Sharing}
+		EmailVerification: cfg.EmailVerification, TermsURL: cfg.TermsURL, PrivacyURL: cfg.PrivacyURL, Contact: cfg.Contact, Sharing: cfg.Sharing,
+		Reviews: cfg.Reviews, VisitorBrowsing: cfg.VisitorBrowsing}
 	return &Store{pool: pool, emailAvailable: cfg.EmailAvailable(), defaults: d, effective: d}
 }
 
@@ -274,6 +283,10 @@ func validate(api, v string) error {
 	case "sharing":
 		if v != config.SharingEnabled && v != config.SharingDisabled {
 			return apierr.Validation("sharing must be enabled or disabled")
+		}
+	case "reviews", "visitorBrowsing":
+		if v != config.Enabled && v != config.Disabled {
+			return apierr.Validation(api + " must be enabled or disabled")
 		}
 	}
 	return nil

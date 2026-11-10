@@ -14,6 +14,7 @@ import (
 
 	"github.com/aluo96078/shinsou_sync_service/internal/auth"
 	"github.com/aluo96078/shinsou_sync_service/internal/lww"
+	"github.com/aluo96078/shinsou_sync_service/internal/reviews"
 	"github.com/aluo96078/shinsou_sync_service/internal/social"
 	"github.com/aluo96078/shinsou_sync_service/internal/syncsvc"
 )
@@ -116,6 +117,10 @@ func (s *Service) Export(ctx context.Context, p *auth.Principal, meta ExportMeta
 	if err != nil {
 		return err
 	}
+	reviewData, err := reviews.ExportData(ctx, tx, p.UserID)
+	if err != nil {
+		return err
+	}
 	// Open the first result set before the response starts, so a database error is still an
 	// ordinary error response.
 	works, err := tx.Query(ctx, `select w.hash, w.key_version, w.package_id, w.source_id, w.remote_id, w.title, w.author, w.cover_url,
@@ -157,6 +162,10 @@ func (s *Service) Export(ctx context.Context, p *auth.Principal, meta ExportMeta
 	}
 	raw(`,"social":`)
 	if err := write(socialData); err != nil {
+		return err
+	}
+	raw(`,"reviews":`)
+	if err := write(reviewData); err != nil {
 		return err
 	}
 	raw(`,"works":[`)

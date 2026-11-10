@@ -138,6 +138,8 @@ type settingsValues struct {
 	Registration      string  `json:"registration"`
 	EmailVerification string  `json:"emailVerification"`
 	Sharing           string  `json:"sharing"`
+	Reviews           string  `json:"reviews"`
+	VisitorBrowsing   string  `json:"visitorBrowsing"`
 	TermsURL          *string `json:"termsUrl"`
 	PrivacyURL        *string `json:"privacyUrl"`
 	Contact           *string `json:"contact"`
@@ -145,7 +147,7 @@ type settingsValues struct {
 
 func toSettingsValues(v settings.Values) settingsValues {
 	return settingsValues{Name: v.Name, Description: v.Description, Registration: v.Registration, EmailVerification: v.EmailVerification,
-		Sharing: v.Sharing, TermsURL: nilIfEmpty(v.TermsURL), PrivacyURL: nilIfEmpty(v.PrivacyURL), Contact: nilIfEmpty(v.Contact)}
+		Sharing: v.Sharing, Reviews: v.Reviews, VisitorBrowsing: v.VisitorBrowsing, TermsURL: nilIfEmpty(v.TermsURL), PrivacyURL: nilIfEmpty(v.PrivacyURL), Contact: nilIfEmpty(v.Contact)}
 }
 
 func (s *Server) writeSettings(w http.ResponseWriter) {

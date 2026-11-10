@@ -21,6 +21,7 @@ import (
 	"github.com/aluo96078/shinsou_sync_service/internal/library"
 	"github.com/aluo96078/shinsou_sync_service/internal/mail"
 	"github.com/aluo96078/shinsou_sync_service/internal/notify"
+	"github.com/aluo96078/shinsou_sync_service/internal/reviews"
 	"github.com/aluo96078/shinsou_sync_service/internal/settings"
 	"github.com/aluo96078/shinsou_sync_service/internal/social"
 	"github.com/aluo96078/shinsou_sync_service/internal/syncsvc"
@@ -48,6 +49,7 @@ type Server struct {
 
 	social        *social.Service
 	socialLimiter *Limiter
+	reviews       *reviews.Service
 }
 
 const maxSmallBody = 64 << 10
@@ -118,6 +120,11 @@ func New(ctx context.Context, cfg config.Config, pool *pgxpool.Pool, log *slog.L
 	}
 	s.social = social.New(pool, s.sync, func() bool { return live.Get().Sharing == config.SharingEnabled }, cfg.SharesPerDay)
 	s.socialLimiter = NewLimiter(cfg.SocialRatePerMinute, cfg.SocialRateBurst)
+	s.reviews = reviews.New(pool,
+		func() bool { return live.Get().Reviews == config.Enabled },
+		func() bool { return live.Get().VisitorBrowsing == config.Enabled },
+		reviews.Limits{PostsPerDay: cfg.ReviewsPerDay, ReportsPerDay: cfg.ReportsPerDay,
+			NewAccountAge: cfg.NewAccountAge, NewAccountPostsPerDay: cfg.NewAccountPostsPerDay})
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /.well-known/shinsou", s.handleInstance)
 	mux.HandleFunc("GET /healthz", s.handleHealth)
@@ -188,6 +195,32 @@ func New(ctx context.Context, cfg config.Config, pool *pgxpool.Pool, log *slog.L
 	mux.HandleFunc("POST /api/v1/shares/{shareId}/dismiss", s.sharing(s.shareAction(func(sv *social.Service, r *http.Request, me, id uuid.UUID) (*social.Share, error) {
 		return sv.Dismiss(r.Context(), me, id)
 	})))
+
+	mux.HandleFunc("GET /api/v1/works/{hash}", s.reviewsPublic(s.handleWork))
+	mux.HandleFunc("GET /api/v1/works/{hash}/reviews", s.reviewsPublic(s.handleWorkReviews))
+	mux.HandleFunc("PUT /api/v1/works/{hash}/review", s.reviewing(s.limitSocial(s.handlePutReview)))
+	mux.HandleFunc("DELETE /api/v1/works/{hash}/review", s.reviewing(s.handleDeleteReview))
+	mux.HandleFunc("GET /api/v1/me/reviews", s.reviewing(s.handleMyReviews))
+	mux.HandleFunc("PUT /api/v1/reviews/{reviewId}/helpful", s.reviewing(s.limitSocial(s.handleHelpful(true))))
+	mux.HandleFunc("DELETE /api/v1/reviews/{reviewId}/helpful", s.reviewing(s.handleHelpful(false)))
+	mux.HandleFunc("GET /api/v1/reviews/{reviewId}/replies", s.reviewsPublic(s.handleReplies))
+	mux.HandleFunc("POST /api/v1/reviews/{reviewId}/replies", s.reviewing(s.limitSocial(s.handleCreateReply)))
+	mux.HandleFunc("DELETE /api/v1/replies/{replyId}", s.reviewing(s.handleDeleteReply))
+	mux.HandleFunc("POST /api/v1/reviews/{reviewId}/report", s.reviewing(s.limitSocial(s.handleReport(false))))
+	mux.HandleFunc("POST /api/v1/replies/{replyId}/report", s.reviewing(s.limitSocial(s.handleReport(true))))
+
+	mux.HandleFunc("GET /api/v1/mod/reports", s.moderator(s.handleModReports))
+	mux.HandleFunc("POST /api/v1/mod/reports/{reportId}/resolve", s.moderator(s.handleModResolve))
+	mux.HandleFunc("GET /api/v1/mod/reviews", s.moderator(s.handleModList(false)))
+	mux.HandleFunc("POST /api/v1/mod/reviews/{reviewId}/hide", s.moderator(s.handleModVisibility(false, true)))
+	mux.HandleFunc("POST /api/v1/mod/reviews/{reviewId}/unhide", s.moderator(s.handleModVisibility(false, false)))
+	mux.HandleFunc("DELETE /api/v1/mod/reviews/{reviewId}", s.moderator(s.handleModRemove(false)))
+	mux.HandleFunc("GET /api/v1/mod/replies", s.moderator(s.handleModList(true)))
+	mux.HandleFunc("POST /api/v1/mod/replies/{replyId}/hide", s.moderator(s.handleModVisibility(true, true)))
+	mux.HandleFunc("POST /api/v1/mod/replies/{replyId}/unhide", s.moderator(s.handleModVisibility(true, false)))
+	mux.HandleFunc("DELETE /api/v1/mod/replies/{replyId}", s.moderator(s.handleModRemove(true)))
+	mux.HandleFunc("POST /api/v1/mod/users/{userId}/suspend", s.moderator(s.handleModSuspend(true)))
+	mux.HandleFunc("POST /api/v1/mod/users/{userId}/unsuspend", s.moderator(s.handleModSuspend(false)))
 
 	mux.HandleFunc("GET /api/v1/admin/overview", s.adminOnly(s.handleAdminOverview))
 	mux.HandleFunc("GET /api/v1/admin/users", s.adminOnly(s.handleAdminListUsers))

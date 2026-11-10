@@ -22,9 +22,10 @@ type instanceInfo struct {
 	Contact           *string `json:"contact"`
 	SetupPending      bool    `json:"setupPending"`
 	Features          struct {
-		Sharing bool `json:"sharing"`
-		Reviews bool `json:"reviews"`
-		Email   bool `json:"email"`
+		Sharing         bool `json:"sharing"`
+		Reviews         bool `json:"reviews"`
+		VisitorBrowsing bool `json:"visitorBrowsing"`
+		Email           bool `json:"email"`
 	} `json:"features"`
 }
 
@@ -55,6 +56,8 @@ func (s *Server) handleInstance(w http.ResponseWriter, r *http.Request) {
 	}
 	info.Features.Email = s.mail.Enabled()
 	info.Features.Sharing = v.Sharing == config.SharingEnabled
+	info.Features.Reviews = v.Reviews == config.Enabled
+	info.Features.VisitorBrowsing = info.Features.Reviews && v.VisitorBrowsing == config.Enabled
 	has, err := instance.HasAdmin(r.Context(), s.pool)
 	if err != nil {
 		s.fail(w, r, err)

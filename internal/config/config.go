@@ -37,6 +37,9 @@ const (
 const (
 	SharingEnabled  = "enabled"
 	SharingDisabled = "disabled"
+	// Enabled and Disabled are the same values under names that do not mention sharing.
+	Enabled  = "enabled"
+	Disabled = "disabled"
 )
 
 // Config is the complete runtime configuration.
@@ -86,6 +89,18 @@ type Config struct {
 	Sharing      string
 	SharesPerDay int
 
+	// Reviews switches reviews on or off; VisitorBrowsing lets people who are not signed in read
+	// work pages and reviews. Both are Enabled or Disabled.
+	Reviews         string
+	VisitorBrowsing string
+	// ReviewsPerDay caps the reviews and replies one account writes in 24 hours, ReportsPerDay its
+	// reports (0 = unlimited). An account younger than NewAccountAge is held to
+	// NewAccountPostsPerDay instead when that is lower.
+	ReviewsPerDay         int
+	ReportsPerDay         int
+	NewAccountAge         time.Duration
+	NewAccountPostsPerDay int
+
 	JobInterval        time.Duration
 	TombstoneRetention time.Duration
 	BatchRetention     time.Duration
@@ -96,30 +111,36 @@ type Config struct {
 // Defaults returns the configuration used when no environment variable is set.
 func Defaults() Config {
 	return Config{
-		Listen:              "127.0.0.1:8080",
-		Registration:        RegistrationInvite,
-		EmailVerification:   EmailDisabled,
-		SMTPPort:            587,
-		SMTPTLS:             SMTPStartTLS,
-		InstanceName:        "Shinsou Sync",
-		RecordQuota:         200000,
-		AccessTokenTTL:      15 * time.Minute,
-		RefreshTokenTTL:     90 * 24 * time.Hour,
-		Argon2MemoryKiB:     64 * 1024,
-		Argon2Time:          3,
-		Argon2Threads:       1,
-		AuthRatePerMinute:   30,
-		AuthRateBurst:       10,
-		PushRatePerMinute:   240,
-		PushRateBurst:       60,
-		SocialRatePerMinute: 120,
-		SocialRateBurst:     40,
-		Sharing:             SharingEnabled,
-		SharesPerDay:        200,
-		JobInterval:         time.Hour,
-		TombstoneRetention:  90 * 24 * time.Hour,
-		BatchRetention:      24 * time.Hour,
-		LogLevel:            "info",
+		Listen:                "127.0.0.1:8080",
+		Registration:          RegistrationInvite,
+		EmailVerification:     EmailDisabled,
+		SMTPPort:              587,
+		SMTPTLS:               SMTPStartTLS,
+		InstanceName:          "Shinsou Sync",
+		RecordQuota:           200000,
+		AccessTokenTTL:        15 * time.Minute,
+		RefreshTokenTTL:       90 * 24 * time.Hour,
+		Argon2MemoryKiB:       64 * 1024,
+		Argon2Time:            3,
+		Argon2Threads:         1,
+		AuthRatePerMinute:     30,
+		AuthRateBurst:         10,
+		PushRatePerMinute:     240,
+		PushRateBurst:         60,
+		SocialRatePerMinute:   120,
+		SocialRateBurst:       40,
+		Sharing:               SharingEnabled,
+		SharesPerDay:          200,
+		Reviews:               Enabled,
+		VisitorBrowsing:       Disabled,
+		ReviewsPerDay:         30,
+		ReportsPerDay:         20,
+		NewAccountAge:         72 * time.Hour,
+		NewAccountPostsPerDay: 5,
+		JobInterval:           time.Hour,
+		TombstoneRetention:    90 * 24 * time.Hour,
+		BatchRetention:        24 * time.Hour,
+		LogLevel:              "info",
 	}
 }
 
@@ -183,6 +204,12 @@ func Load(getenv func(string) string) (Config, error) {
 	num("SHINSOU_SOCIAL_RATE_BURST", &c.SocialRateBurst)
 	num("SHINSOU_SHARES_PER_DAY", &c.SharesPerDay)
 	str("SHINSOU_SHARING", &c.Sharing)
+	str("SHINSOU_REVIEWS", &c.Reviews)
+	str("SHINSOU_VISITOR_BROWSING", &c.VisitorBrowsing)
+	num("SHINSOU_REVIEWS_PER_DAY", &c.ReviewsPerDay)
+	num("SHINSOU_REPORTS_PER_DAY", &c.ReportsPerDay)
+	num("SHINSOU_NEW_ACCOUNT_POSTS_PER_DAY", &c.NewAccountPostsPerDay)
+	dur("SHINSOU_NEW_ACCOUNT_AGE", &c.NewAccountAge)
 	dur("SHINSOU_ACCESS_TOKEN_TTL", &c.AccessTokenTTL)
 	dur("SHINSOU_REFRESH_TOKEN_TTL", &c.RefreshTokenTTL)
 	dur("SHINSOU_JOB_INTERVAL", &c.JobInterval)
@@ -217,6 +244,11 @@ func Load(getenv func(string) string) (Config, error) {
 	case SharingEnabled, SharingDisabled:
 	default:
 		errs = append(errs, fmt.Errorf("SHINSOU_SHARING: want enabled or disabled, got %q", c.Sharing))
+	}
+	for _, sw := range []struct{ key, value string }{{"SHINSOU_REVIEWS", c.Reviews}, {"SHINSOU_VISITOR_BROWSING", c.VisitorBrowsing}} {
+		if sw.value != Enabled && sw.value != Disabled {
+			errs = append(errs, fmt.Errorf("%s: want enabled or disabled, got %q", sw.key, sw.value))
+		}
 	}
 	c.PublicURL = strings.TrimRight(c.PublicURL, "/")
 	errs = append(errs, c.validateMail(verificationSet)...)
