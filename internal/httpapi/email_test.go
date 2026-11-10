@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/aluo96078/shinsou_sync_service/internal/config"
@@ -484,5 +485,50 @@ func TestEmailTokenPurge(t *testing.T) {
 	var left int
 	if err := e.pool.QueryRow(context.Background(), `select count(*) from email_tokens`).Scan(&left); err != nil || left != 1 {
 		t.Fatalf("left %d, err %v", left, err)
+	}
+}
+
+// Mail flows that touch the same account at once must wait for each other: none may fail with a
+// server error (a deadlock would surface as one).
+func TestConcurrentMailFlowsDoNotFail(t *testing.T) {
+	e := mailEnv(t, config.EmailRequired)
+	u := e.registerWith("alice", "alice@example.com")
+	verify := tokenOf(t, e.lastMail("alice@example.com"))
+	expect[map[string]any](e, 204, "POST", "/api/v1/auth/password/forgot", "", map[string]any{"email": "alice@example.com"})
+	reset := tokenOf(t, e.lastMail("alice@example.com"))
+
+	calls := []func() int{
+		func() int {
+			s, _ := e.call("PUT", "/api/v1/me/email", u.AccessToken, map[string]any{"email": "alice2@example.com", "currentPassword": "correct horse"})
+			return s
+		},
+		func() int { return e.verifyToken(verify) },
+		func() int { return e.verifyToken(verify) },
+		func() int {
+			s, _ := e.call("POST", "/api/v1/auth/password/reset", "", map[string]any{"token": reset, "newPassword": "brand new pass"})
+			return s
+		},
+		func() int {
+			s, _ := e.call("POST", "/api/v1/auth/password/reset", "", map[string]any{"token": reset, "newPassword": "another pass 1"})
+			return s
+		},
+	}
+	statuses := make([]int, len(calls))
+	var wg sync.WaitGroup
+	for i, c := range calls {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			statuses[i] = c()
+		}()
+	}
+	wg.Wait()
+	for i, s := range statuses {
+		if s >= 500 {
+			t.Errorf("call %d answered %d", i, s)
+		}
+	}
+	if statuses[3] == 204 && statuses[4] == 204 {
+		t.Error("the reset token was used twice")
 	}
 }

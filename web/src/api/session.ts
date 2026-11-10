@@ -68,7 +68,12 @@ export function tokenIsStale(): boolean {
   return session.accessToken !== null && session.expiresAt - Date.now() < REFRESH_LEAD_MS
 }
 
-async function withRefreshLock<T>(fn: () => Promise<T>): Promise<T> {
+/**
+ * Runs fn while holding the cross-tab lock that guards the session cookies. Anything that reads
+ * the CSRF cookie and then sends it (refresh, logout) has to run under it, or a rotation in
+ * another tab can slip in between.
+ */
+export async function withRefreshLock<T>(fn: () => Promise<T>): Promise<T> {
   const locks = typeof navigator !== 'undefined' ? navigator.locks : undefined
   if (locks && typeof locks.request === 'function') return locks.request(REFRESH_LOCK, fn)
   return fn()

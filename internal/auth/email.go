@@ -77,6 +77,25 @@ func tooSoon(wait time.Duration) *apierr.Error {
 		Message: "a mail was sent a moment ago; try again later", RetryAfterSeconds: int(math.Ceil(wait.Seconds()))}
 }
 
+// lockTokenOwner locks the account a mail token belongs to and reports whether the token exists.
+// Every mail flow takes the user row before any token row, so two of them (following a link while
+// the address is being changed, two reset links at once) wait for each other instead of deadlocking.
+func lockTokenOwner(ctx context.Context, tx pgx.Tx, token string) (bool, error) {
+	var userID uuid.UUID
+	err := tx.QueryRow(ctx, `select user_id from email_tokens where token_hash = $1`, hashMailToken(token)).Scan(&userID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	err = tx.QueryRow(ctx, `select id from users where id = $1 for update`, userID).Scan(&userID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	return err == nil, err
+}
+
 // VerifyEmail confirms an address with the token from the verification mail.
 func (s *Service) VerifyEmail(ctx context.Context, token string) error {
 	if token == "" {
@@ -93,6 +112,12 @@ func (s *Service) VerifyEmail(ctx context.Context, token string) error {
 			userEmail *string
 			verified  bool
 		)
+		if found, err := lockTokenOwner(ctx, tx, token); err != nil {
+			return err
+		} else if !found {
+			failure = errInvalidToken()
+			return nil
+		}
 		err := tx.QueryRow(ctx, `select t.user_id, t.purpose, t.email, t.expires_at <= now(), t.used_at is not null,
 				u.email, u.email_verified
 			from email_tokens t join users u on u.id = t.user_id
@@ -306,6 +331,12 @@ func (s *Service) ResetPassword(ctx context.Context, token, newPassword string) 
 			used      bool
 			userEmail *string
 		)
+		if found, err := lockTokenOwner(ctx, tx, token); err != nil {
+			return err
+		} else if !found {
+			failure = errInvalidToken()
+			return nil
+		}
 		err := tx.QueryRow(ctx, `select t.user_id, t.purpose, t.email, t.expires_at <= now(), t.used_at is not null, u.email
 			from email_tokens t join users u on u.id = t.user_id
 			where t.token_hash = $1 for update of t`, hashMailToken(token)).

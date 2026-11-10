@@ -1,4 +1,5 @@
 import { readCsrfCookie } from '@/lib/cookies'
+import { ApiError } from './client'
 import * as endpoints from './endpoints'
 import {
   clearSession,
@@ -7,6 +8,7 @@ import {
   setTokens,
   tokenIsStale,
   handleAuthLost,
+  withRefreshLock,
 } from './session'
 import type { WebLoginRequest, WebRegisterRequest, WebSession } from './types'
 
@@ -28,14 +30,20 @@ export async function reloadMe(): Promise<void> {
   session.user = await endpoints.getMe()
 }
 
+/**
+ * Signs out on the server, then forgets the session locally. When the server refuses, the session
+ * is kept and the error is thrown: the refresh cookie is still valid, so pretending otherwise would
+ * sign the user back in on the next reload.
+ */
 export async function logout(): Promise<void> {
   try {
-    await endpoints.webLogout()
-  } catch {
-    // Even if the server cannot be reached, forget the session locally.
-  } finally {
-    clearSession()
+    // Under the refresh lock, so a rotation in another tab cannot swap the CSRF cookie mid-way.
+    await withRefreshLock(() => endpoints.webLogout())
+  } catch (e) {
+    if (e instanceof ApiError && e.status !== 401) throw e
+    // The server cannot be reached, or the session is gone already: forget it locally.
   }
+  clearSession()
 }
 
 let ready: Promise<void> | null = null

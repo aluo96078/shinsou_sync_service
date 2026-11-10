@@ -38,6 +38,7 @@ export const zhHant = {
   'nav.account': '帳號',
   'nav.admin': '管理',
   'nav.signOut': '登出',
+  'nav.signOutFailed': '登出失敗。',
   'nav.signIn': '登入',
 
   'theme.label': '外觀',

@@ -39,6 +39,7 @@ export const en: Record<MessageKey, string> = {
   'nav.account': 'Account',
   'nav.admin': 'Admin',
   'nav.signOut': 'Sign out',
+  'nav.signOutFailed': 'Could not sign out.',
   'nav.signIn': 'Sign in',
 
   'theme.label': 'Appearance',

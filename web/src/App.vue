@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { computed, watchEffect } from 'vue'
+import { computed, ref, watchEffect } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { logout } from '@/api/auth'
 import { session } from '@/api/session'
-import { LOCALES, LOCALE_NAMES, locale, setLocale, t, type Locale, type MessageKey } from '@/i18n'
+import { LOCALES, LOCALE_NAMES, errorMessage, locale, setLocale, t, type Locale, type MessageKey } from '@/i18n'
 import { THEMES, setTheme, theme, type ThemeChoice } from '@/stores/theme'
 import { instanceName, verificationPolicy } from '@/stores/instance'
 import { useResendVerification } from '@/lib/useResend'
@@ -49,8 +49,16 @@ const noEmail = computed(() => !user.value?.email)
 const { busy: resendBusy, message: resendMessage, failed: resendFailed, resend } =
   useResendVerification()
 
+const signOutError = ref<string | null>(null)
+
 async function signOut(): Promise<void> {
-  await logout()
+  signOutError.value = null
+  try {
+    await logout()
+  } catch (e) {
+    signOutError.value = errorMessage(e)
+    return
+  }
   await router.push({ name: 'login' })
 }
 
@@ -102,6 +110,12 @@ function onTheme(e: Event): void {
       <button v-else type="button" class="btn btn-small" :disabled="resendBusy" @click="resend">
         {{ t('banner.resend') }}
       </button>
+    </div>
+  </div>
+
+  <div v-if="signOutError" class="banner" role="alert">
+    <div class="banner-inner">
+      <p class="text-error">{{ t('nav.signOutFailed') }} {{ signOutError }}</p>
     </div>
   </div>
 
