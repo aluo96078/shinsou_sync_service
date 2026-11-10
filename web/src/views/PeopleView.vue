@@ -84,7 +84,12 @@ async function runSearch(): Promise<void> {
 
 async function submitSearch(): Promise<void> {
   const q = query.value.trim().replace(/^@/, '')
-  await router.replace({ name: 'people', query: q ? { q } : {} })
+  const current = typeof route.query.q === 'string' ? route.query.q : ''
+  if (q !== current) {
+    // The route watcher runs the search; searching here too would spend the rate limit twice.
+    await router.replace({ name: 'people', query: q ? { q } : {} })
+    return
+  }
   await runSearch()
 }
 

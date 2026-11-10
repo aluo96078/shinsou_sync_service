@@ -64,6 +64,14 @@ onMounted(() => {
   void refreshPendingShares()
 })
 watch(offset, load)
+// A filter only one box offers (dismissed) must not carry over to the other box.
+watch(
+  () => props.box,
+  () => {
+    if (status.value && !statuses.value.includes(status.value)) status.value = ''
+  },
+  { flush: 'sync' },
+)
 watch([status, () => props.box], () => {
   notice.value = null
   if (offset.value === 0) void load()
