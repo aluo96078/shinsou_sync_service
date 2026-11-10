@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/aluo96078/shinsou_sync_service/internal/account"
@@ -21,6 +22,7 @@ import (
 	"github.com/aluo96078/shinsou_sync_service/internal/mail"
 	"github.com/aluo96078/shinsou_sync_service/internal/notify"
 	"github.com/aluo96078/shinsou_sync_service/internal/settings"
+	"github.com/aluo96078/shinsou_sync_service/internal/social"
 	"github.com/aluo96078/shinsou_sync_service/internal/syncsvc"
 )
 
@@ -43,6 +45,9 @@ type Server struct {
 	library  *library.Service
 	admin    *admin.Service
 	csrfKey  []byte
+
+	social        *social.Service
+	socialLimiter *Limiter
 }
 
 const maxSmallBody = 64 << 10
@@ -111,6 +116,8 @@ func New(ctx context.Context, cfg config.Config, pool *pgxpool.Pool, log *slog.L
 		admin:       admin.New(pool, version, cfg.EmailAvailable()),
 		csrfKey:     csrfKey,
 	}
+	s.social = social.New(pool, s.sync, func() bool { return live.Get().Sharing == config.SharingEnabled }, cfg.SharesPerDay)
+	s.socialLimiter = NewLimiter(cfg.SocialRatePerMinute, cfg.SocialRateBurst)
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /.well-known/shinsou", s.handleInstance)
 	mux.HandleFunc("GET /healthz", s.handleHealth)
@@ -146,6 +153,41 @@ func New(ctx context.Context, cfg config.Config, pool *pgxpool.Pool, log *slog.L
 	mux.HandleFunc("GET /api/v1/library", s.verified(s.handleLibraryList))
 	mux.HandleFunc("GET /api/v1/library/{key}", s.verified(s.handleLibraryGet))
 	mux.HandleFunc("GET /api/v1/categories", s.verified(s.handleCategories))
+
+	mux.HandleFunc("GET /api/v1/users", s.verified(s.limitSocial(s.handleSearchUsers)))
+	mux.HandleFunc("GET /api/v1/me/following", s.verified(s.userList(func(sv *social.Service, r *http.Request, me uuid.UUID, off, lim int) (*social.UserPage, error) {
+		return sv.Following(r.Context(), me, off, lim)
+	})))
+	mux.HandleFunc("PUT /api/v1/me/following/{userId}", s.verified(s.userAction(func(sv *social.Service, r *http.Request, me, target uuid.UUID) error {
+		return sv.Follow(r.Context(), me, target)
+	})))
+	mux.HandleFunc("DELETE /api/v1/me/following/{userId}", s.verified(s.userAction(func(sv *social.Service, r *http.Request, me, target uuid.UUID) error {
+		return sv.Unfollow(r.Context(), me, target)
+	})))
+	mux.HandleFunc("GET /api/v1/me/followers", s.verified(s.userList(func(sv *social.Service, r *http.Request, me uuid.UUID, off, lim int) (*social.UserPage, error) {
+		return sv.Followers(r.Context(), me, off, lim)
+	})))
+	mux.HandleFunc("GET /api/v1/me/blocks", s.verified(s.userList(func(sv *social.Service, r *http.Request, me uuid.UUID, off, lim int) (*social.UserPage, error) {
+		return sv.Blocks(r.Context(), me, off, lim)
+	})))
+	mux.HandleFunc("PUT /api/v1/me/blocks/{userId}", s.verified(s.userAction(func(sv *social.Service, r *http.Request, me, target uuid.UUID) error {
+		return sv.Block(r.Context(), me, target)
+	})))
+	mux.HandleFunc("DELETE /api/v1/me/blocks/{userId}", s.verified(s.userAction(func(sv *social.Service, r *http.Request, me, target uuid.UUID) error {
+		return sv.Unblock(r.Context(), me, target)
+	})))
+	mux.HandleFunc("GET /api/v1/me/sharing", s.verified(s.handleGetSharing))
+	mux.HandleFunc("PUT /api/v1/me/sharing", s.verified(s.handlePutSharing))
+	mux.HandleFunc("GET /api/v1/shares", s.sharing(s.handleListShares))
+	mux.HandleFunc("POST /api/v1/shares", s.sharing(s.limitSocial(s.handleCreateShare)))
+	mux.HandleFunc("GET /api/v1/shares/summary", s.sharing(s.handleShareSummary))
+	mux.HandleFunc("DELETE /api/v1/shares/{shareId}", s.sharing(s.handleDeleteShare))
+	mux.HandleFunc("POST /api/v1/shares/{shareId}/accept", s.sharing(s.shareAction(func(sv *social.Service, r *http.Request, me, id uuid.UUID) (*social.Share, error) {
+		return sv.Accept(r.Context(), me, id)
+	})))
+	mux.HandleFunc("POST /api/v1/shares/{shareId}/dismiss", s.sharing(s.shareAction(func(sv *social.Service, r *http.Request, me, id uuid.UUID) (*social.Share, error) {
+		return sv.Dismiss(r.Context(), me, id)
+	})))
 
 	mux.HandleFunc("GET /api/v1/admin/overview", s.adminOnly(s.handleAdminOverview))
 	mux.HandleFunc("GET /api/v1/admin/users", s.adminOnly(s.handleAdminListUsers))

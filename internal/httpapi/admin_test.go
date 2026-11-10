@@ -489,6 +489,7 @@ type settingsResp struct {
 		Description       string  `json:"description"`
 		Registration      string  `json:"registration"`
 		EmailVerification string  `json:"emailVerification"`
+		Sharing           string  `json:"sharing"`
 		TermsURL          *string `json:"termsUrl"`
 		PrivacyURL        *string `json:"privacyUrl"`
 		Contact           *string `json:"contact"`
@@ -496,6 +497,7 @@ type settingsResp struct {
 	Defaults struct {
 		Name         string `json:"name"`
 		Registration string `json:"registration"`
+		Sharing      string `json:"sharing"`
 	} `json:"defaults"`
 	Overridden     []string `json:"overridden"`
 	EmailAvailable bool     `json:"emailAvailable"`

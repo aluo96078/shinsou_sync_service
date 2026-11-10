@@ -685,6 +685,253 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/users": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description Finds active accounts on this server whose user name starts with `q` (case-insensitive).
+         *     The caller and accounts that blocked the caller are never listed. Limited per account;
+         *     429 `rate_limited` when exceeded.
+         */
+        get: operations["searchUsers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/following": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Accounts the caller follows, newest first. */
+        get: operations["listFollowing"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/following/{userId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                userId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * @description Follows an account; repeating it changes nothing. 404 when the account does not exist, is
+         *     suspended or blocked the caller. 409 `user_blocked` while the caller blocks the account.
+         */
+        put: operations["followUser"];
+        post?: never;
+        delete: operations["unfollowUser"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/followers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Accounts that follow the caller, newest first. */
+        get: operations["listFollowers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/blocks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Accounts the caller blocks, newest first. */
+        get: operations["listBlocks"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/blocks/{userId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                userId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * @description Blocks an account; repeating it changes nothing. Both accounts stop following each other
+         *     and the open shares the blocked account sent to the caller are dismissed. The blocked
+         *     account can no longer find, follow or share with the caller. 404 when the account does
+         *     not exist.
+         */
+        put: operations["blockUser"];
+        post?: never;
+        delete: operations["unblockUser"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/sharing": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getSharingPreferences"];
+        put: operations["setSharingPreferences"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/shares": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description The caller's received (`inbox`) or sent shares, newest first. In the `sent` box a share
+         *     the recipient dismissed still reads `pending`: only acceptance is shown to the sender.
+         *     403 `feature_disabled` while the server has sharing turned off.
+         */
+        get: operations["listShares"];
+        put?: never;
+        /**
+         * @description Shares a work from the caller's library with another account. Sending the same work to
+         *     the same account again while the first share is still open returns that share (200).
+         *
+         *     - 403 `feature_disabled`: sharing is turned off on this server.
+         *     - 403 `share_refused`: the recipient does not accept shares from the caller (their
+         *       preference, or they blocked the caller; the two are not told apart).
+         *     - 404 `not_found`: no such active account.
+         *     - 409 `user_blocked`: the caller blocks the recipient.
+         *     - 422 `unknown_work`: the work is not in the caller's library (entries imported from
+         *       local files cannot be shared).
+         *     - 429 `rate_limited`: too many shares; `retryAfterSeconds` says when to try again.
+         */
+        post: operations["createShare"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/shares/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description How many received shares are waiting for an answer. Cheap; meant for a badge. */
+        get: operations["getShareSummary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/shares/{shareId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                shareId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** @description Removes a share for both sides. The sender uses it to take a share back, the recipient to clear the inbox. */
+        delete: operations["deleteShare"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/shares/{shareId}/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                shareId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * @description Recipient only. Adds the work to the caller's library (a `library` record written by the
+         *     server, which reaches the caller's devices through the normal sync) and marks the share
+         *     accepted. Safe to repeat. 409 `quota_exceeded` when the library record does not fit the
+         *     account's quota.
+         */
+        post: operations["acceptShare"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/shares/{shareId}/dismiss": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                shareId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Recipient only. Marks an open share dismissed; the sender is not told. 409 `conflict` when it was accepted already. */
+        post: operations["dismissShare"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -695,7 +942,7 @@ export interface components {
                  * @description Stable machine-readable code; message is for humans and may change.
                  * @enum {string}
                  */
-                code: "bad_request" | "unauthorized" | "invalid_credentials" | "refresh_token_reused" | "forbidden" | "registration_closed" | "invite_required" | "email_unverified" | "email_required" | "email_unavailable" | "invalid_token" | "csrf_failed" | "last_admin" | "not_found" | "username_taken" | "email_taken" | "conflict" | "validation_failed" | "invalid_work_key" | "work_hash_mismatch" | "payload_too_large" | "quota_exceeded" | "rate_limited" | "resync_required" | "unsupported_api_version" | "internal";
+                code: "bad_request" | "unauthorized" | "invalid_credentials" | "refresh_token_reused" | "forbidden" | "registration_closed" | "invite_required" | "email_unverified" | "email_required" | "email_unavailable" | "invalid_token" | "csrf_failed" | "last_admin" | "feature_disabled" | "share_refused" | "user_blocked" | "unknown_work" | "not_found" | "username_taken" | "email_taken" | "conflict" | "validation_failed" | "invalid_work_key" | "work_hash_mismatch" | "payload_too_large" | "quota_exceeded" | "rate_limited" | "resync_required" | "unsupported_api_version" | "internal";
                 message: string;
                 retryAfterSeconds?: number;
             };
@@ -926,6 +1173,16 @@ export interface components {
             };
             user: components["schemas"]["User"];
             devices: components["schemas"]["Device"][];
+            /** @description Sharing data; work descriptions of shares are inline. */
+            social?: {
+                /** @enum {string} */
+                receiveFrom: "everyone" | "following" | "nobody";
+                following: components["schemas"]["ShareParty"][];
+                followers: components["schemas"]["ShareParty"][];
+                blocks: components["schemas"]["ShareParty"][];
+                /** @description Sent and received shares, with the same sender-side masking as the API. */
+                shares: components["schemas"]["Share"][];
+            };
             /** @description Descriptions of the works the records refer to. */
             works: components["schemas"]["WorkDescriptor"][];
             records: (components["schemas"]["SyncRecord"] & {
@@ -1055,6 +1312,11 @@ export interface components {
             /** Format: uri */
             privacyUrl: string | null;
             contact: string | null;
+            /**
+             * @description Whether users can share works with each other.
+             * @enum {string}
+             */
+            sharing: "enabled" | "disabled";
         };
         /** @description Only the keys that are present change. `null` resets a key to its environment default. */
         InstanceSettingsPatch: {
@@ -1067,6 +1329,8 @@ export interface components {
             termsUrl?: string | null;
             privacyUrl?: string | null;
             contact?: string | null;
+            /** @enum {string|null} */
+            sharing?: "enabled" | "disabled" | null;
         };
         AdminSettings: {
             values: components["schemas"]["InstanceSettings"];
@@ -1089,6 +1353,80 @@ export interface components {
             detail?: Record<string, never> | null;
             /** Format: int64 */
             createdAt: number;
+        };
+        UserSummary: {
+            /** Format: uuid */
+            id: string;
+            username: string;
+            /** @description The caller follows this account. */
+            following: boolean;
+            /** @description This account follows the caller. */
+            followsYou: boolean;
+            /** @description The caller blocks this account. */
+            blocked: boolean;
+            /** @description A share from the caller would be accepted right now. */
+            canShare: boolean;
+            /**
+             * Format: int64
+             * @description When the follow or block began (lists of follows and blocks only).
+             */
+            since?: number;
+        };
+        UserList: {
+            users: components["schemas"]["UserSummary"][];
+        };
+        UserPage: {
+            users: components["schemas"]["UserSummary"][];
+            total: number;
+            offset: number;
+            limit: number;
+        };
+        SharingPreferences: {
+            /**
+             * @description Who may send the caller a share - everyone, only accounts the caller follows, or nobody.
+             * @enum {string}
+             */
+            receiveFrom: "everyone" | "following" | "nobody";
+        };
+        ShareRequest: {
+            /** Format: uuid */
+            recipientId: string;
+            /** @description Work hash; the work must be in the caller's library. */
+            work: string;
+            /** @description Plain text; shown to the recipient as is. */
+            message?: string;
+        };
+        ShareParty: {
+            /** Format: uuid */
+            id: string;
+            username: string;
+        };
+        Share: {
+            /** Format: uuid */
+            id: string;
+            sender: components["schemas"]["ShareParty"];
+            recipient: components["schemas"]["ShareParty"];
+            work: components["schemas"]["WorkDescriptor"];
+            message: string;
+            /** @enum {string} */
+            status: "pending" | "accepted" | "dismissed";
+            /** Format: int64 */
+            createdAt: number;
+            /**
+             * Format: int64
+             * @description Recipient's view only.
+             */
+            respondedAt?: number | null;
+            /** @description The work is in the caller's library. */
+            inLibrary: boolean;
+        };
+        SharePage: {
+            shares: components["schemas"]["Share"][];
+            total: number;
+            offset: number;
+            limit: number;
+            /** @description Received shares waiting for an answer */
+            pending: number;
         };
     };
     responses: {
@@ -1582,6 +1920,7 @@ export interface operations {
             401: components["responses"]["Error"];
             409: components["responses"]["Error"];
             422: components["responses"]["Error"];
+            429: components["responses"]["Error"];
         };
     };
     resendVerification: {
@@ -2150,6 +2489,444 @@ export interface operations {
             };
             401: components["responses"]["Error"];
             403: components["responses"]["Error"];
+        };
+    };
+    searchUsers: {
+        parameters: {
+            query: {
+                q: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserList"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            429: components["responses"]["Error"];
+        };
+    };
+    listFollowing: {
+        parameters: {
+            query?: {
+                offset?: number;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserPage"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+        };
+    };
+    followUser: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Value of the `shinsou_csrf` cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+            };
+            path: {
+                userId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Following */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            409: components["responses"]["Error"];
+            422: components["responses"]["Error"];
+        };
+    };
+    unfollowUser: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Value of the `shinsou_csrf` cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+            };
+            path: {
+                userId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Not following (any more) */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+        };
+    };
+    listFollowers: {
+        parameters: {
+            query?: {
+                offset?: number;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserPage"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+        };
+    };
+    listBlocks: {
+        parameters: {
+            query?: {
+                offset?: number;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserPage"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+        };
+    };
+    blockUser: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Value of the `shinsou_csrf` cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+            };
+            path: {
+                userId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Blocked */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            422: components["responses"]["Error"];
+        };
+    };
+    unblockUser: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Value of the `shinsou_csrf` cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+            };
+            path: {
+                userId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Not blocked (any more) */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+        };
+    };
+    getSharingPreferences: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SharingPreferences"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+        };
+    };
+    setSharingPreferences: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Value of the `shinsou_csrf` cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SharingPreferences"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SharingPreferences"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            422: components["responses"]["Error"];
+        };
+    };
+    listShares: {
+        parameters: {
+            query?: {
+                box?: "inbox" | "sent";
+                /** @description Only shares in this state; `dismissed` matches nothing in the `sent` box. */
+                status?: "pending" | "accepted" | "dismissed";
+                offset?: number;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SharePage"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+        };
+    };
+    createShare: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Value of the `shinsou_csrf` cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShareRequest"];
+            };
+        };
+        responses: {
+            /** @description The same share is already open */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Share"];
+                };
+            };
+            /** @description Shared */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Share"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            409: components["responses"]["Error"];
+            422: components["responses"]["Error"];
+            429: components["responses"]["Error"];
+        };
+    };
+    getShareSummary: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        pending: number;
+                    };
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+        };
+    };
+    deleteShare: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Value of the `shinsou_csrf` cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+            };
+            path: {
+                shareId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    acceptShare: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Value of the `shinsou_csrf` cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+            };
+            path: {
+                shareId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Share"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            409: components["responses"]["Error"];
+        };
+    };
+    dismissShare: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Value of the `shinsou_csrf` cookie. */
+                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+            };
+            path: {
+                shareId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Share"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            409: components["responses"]["Error"];
         };
     };
 }

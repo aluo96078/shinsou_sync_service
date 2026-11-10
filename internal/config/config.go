@@ -33,6 +33,12 @@ const (
 	EmailRequired = "required"
 )
 
+// Feature switch values.
+const (
+	SharingEnabled  = "enabled"
+	SharingDisabled = "disabled"
+)
+
 // Config is the complete runtime configuration.
 type Config struct {
 	DatabaseURL string
@@ -72,6 +78,13 @@ type Config struct {
 	AuthRateBurst     int
 	PushRatePerMinute int
 	PushRateBurst     int
+	// Per account: user search and share creation together.
+	SocialRatePerMinute int
+	SocialRateBurst     int
+
+	// Sharing is SharingEnabled or SharingDisabled; SharesPerDay caps new shares per account (0 = unlimited).
+	Sharing      string
+	SharesPerDay int
 
 	JobInterval        time.Duration
 	TombstoneRetention time.Duration
@@ -83,26 +96,30 @@ type Config struct {
 // Defaults returns the configuration used when no environment variable is set.
 func Defaults() Config {
 	return Config{
-		Listen:             "127.0.0.1:8080",
-		Registration:       RegistrationInvite,
-		EmailVerification:  EmailDisabled,
-		SMTPPort:           587,
-		SMTPTLS:            SMTPStartTLS,
-		InstanceName:       "Shinsou Sync",
-		RecordQuota:        200000,
-		AccessTokenTTL:     15 * time.Minute,
-		RefreshTokenTTL:    90 * 24 * time.Hour,
-		Argon2MemoryKiB:    64 * 1024,
-		Argon2Time:         3,
-		Argon2Threads:      1,
-		AuthRatePerMinute:  30,
-		AuthRateBurst:      10,
-		PushRatePerMinute:  240,
-		PushRateBurst:      60,
-		JobInterval:        time.Hour,
-		TombstoneRetention: 90 * 24 * time.Hour,
-		BatchRetention:     24 * time.Hour,
-		LogLevel:           "info",
+		Listen:              "127.0.0.1:8080",
+		Registration:        RegistrationInvite,
+		EmailVerification:   EmailDisabled,
+		SMTPPort:            587,
+		SMTPTLS:             SMTPStartTLS,
+		InstanceName:        "Shinsou Sync",
+		RecordQuota:         200000,
+		AccessTokenTTL:      15 * time.Minute,
+		RefreshTokenTTL:     90 * 24 * time.Hour,
+		Argon2MemoryKiB:     64 * 1024,
+		Argon2Time:          3,
+		Argon2Threads:       1,
+		AuthRatePerMinute:   30,
+		AuthRateBurst:       10,
+		PushRatePerMinute:   240,
+		PushRateBurst:       60,
+		SocialRatePerMinute: 120,
+		SocialRateBurst:     40,
+		Sharing:             SharingEnabled,
+		SharesPerDay:        200,
+		JobInterval:         time.Hour,
+		TombstoneRetention:  90 * 24 * time.Hour,
+		BatchRetention:      24 * time.Hour,
+		LogLevel:            "info",
 	}
 }
 
@@ -162,6 +179,10 @@ func Load(getenv func(string) string) (Config, error) {
 	num("SHINSOU_AUTH_RATE_BURST", &c.AuthRateBurst)
 	num("SHINSOU_PUSH_RATE_PER_MINUTE", &c.PushRatePerMinute)
 	num("SHINSOU_PUSH_RATE_BURST", &c.PushRateBurst)
+	num("SHINSOU_SOCIAL_RATE_PER_MINUTE", &c.SocialRatePerMinute)
+	num("SHINSOU_SOCIAL_RATE_BURST", &c.SocialRateBurst)
+	num("SHINSOU_SHARES_PER_DAY", &c.SharesPerDay)
+	str("SHINSOU_SHARING", &c.Sharing)
 	dur("SHINSOU_ACCESS_TOKEN_TTL", &c.AccessTokenTTL)
 	dur("SHINSOU_REFRESH_TOKEN_TTL", &c.RefreshTokenTTL)
 	dur("SHINSOU_JOB_INTERVAL", &c.JobInterval)
@@ -191,6 +212,11 @@ func Load(getenv func(string) string) (Config, error) {
 	case EmailDisabled, EmailOptional, EmailRequired:
 	default:
 		errs = append(errs, fmt.Errorf("SHINSOU_EMAIL_VERIFICATION: want disabled, optional or required, got %q", c.EmailVerification))
+	}
+	switch c.Sharing {
+	case SharingEnabled, SharingDisabled:
+	default:
+		errs = append(errs, fmt.Errorf("SHINSOU_SHARING: want enabled or disabled, got %q", c.Sharing))
 	}
 	c.PublicURL = strings.TrimRight(c.PublicURL, "/")
 	errs = append(errs, c.validateMail(verificationSet)...)

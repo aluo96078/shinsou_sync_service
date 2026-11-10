@@ -9,7 +9,8 @@ func TestLoadDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c.Registration != RegistrationInvite || c.RecordQuota != 200000 || c.Listen != "127.0.0.1:8080" {
+	if c.Registration != RegistrationInvite || c.RecordQuota != 200000 || c.Listen != "127.0.0.1:8080" ||
+		c.Sharing != SharingEnabled || c.SharesPerDay != 200 || c.SocialRatePerMinute != 120 || c.SocialRateBurst != 40 {
 		t.Fatalf("unexpected defaults: %+v", c)
 	}
 }
@@ -21,11 +22,14 @@ func TestLoadOverrides(t *testing.T) {
 		"SHINSOU_TRUSTED_PROXIES":     "10.0.0.0/8, 127.0.0.1",
 		"SHINSOU_PUBLIC_URL":          "https://sync.example.com/",
 		"SHINSOU_TOMBSTONE_RETENTION": "1h",
+		"SHINSOU_SHARING":             "disabled",
+		"SHINSOU_SHARES_PER_DAY":      "0",
 	}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c.Registration != "open" || c.RecordQuota != 5 || len(c.TrustedProxies) != 2 || c.PublicURL != "https://sync.example.com" {
+	if c.Registration != "open" || c.RecordQuota != 5 || len(c.TrustedProxies) != 2 || c.PublicURL != "https://sync.example.com" ||
+		c.Sharing != SharingDisabled || c.SharesPerDay != 0 {
 		t.Fatalf("unexpected: %+v", c)
 	}
 }
@@ -37,6 +41,8 @@ func TestLoadRejectsBadValues(t *testing.T) {
 		{"SHINSOU_TRUSTED_PROXIES": "nope"},
 		{"SHINSOU_JOB_INTERVAL": "soon"},
 		{"SHINSOU_EMAIL_VERIFICATION": "x"},
+		{"SHINSOU_SHARING": "on"},
+		{"SHINSOU_SHARES_PER_DAY": "-1"},
 	} {
 		if _, err := Load(env(m)); err == nil {
 			t.Errorf("expected error for %v", m)

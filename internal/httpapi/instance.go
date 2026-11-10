@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/aluo96078/shinsou_sync_service/internal/apierr"
+	"github.com/aluo96078/shinsou_sync_service/internal/config"
 	"github.com/aluo96078/shinsou_sync_service/internal/instance"
 )
 
@@ -53,6 +54,7 @@ func (s *Server) handleInstance(w http.ResponseWriter, r *http.Request) {
 		Contact:           nilIfEmpty(v.Contact),
 	}
 	info.Features.Email = s.mail.Enabled()
+	info.Features.Sharing = v.Sharing == config.SharingEnabled
 	has, err := instance.HasAdmin(r.Context(), s.pool)
 	if err != nil {
 		s.fail(w, r, err)

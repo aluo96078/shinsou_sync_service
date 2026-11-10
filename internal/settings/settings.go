@@ -30,6 +30,7 @@ type Values struct {
 	TermsURL          string
 	PrivacyURL        string
 	Contact           string
+	Sharing           string // config.SharingEnabled or config.SharingDisabled
 }
 
 // keys maps the JSON name used by the API to the instance_settings key.
@@ -41,6 +42,7 @@ var keys = []struct{ api, db string }{
 	{"termsUrl", "terms_url"},
 	{"privacyUrl", "privacy_url"},
 	{"contact", "contact"},
+	{"sharing", "sharing"},
 }
 
 func dbKey(api string) (string, bool) {
@@ -68,6 +70,8 @@ func (v *Values) field(db string) *string {
 		return &v.PrivacyURL
 	case "contact":
 		return &v.Contact
+	case "sharing":
+		return &v.Sharing
 	}
 	return nil
 }
@@ -88,7 +92,7 @@ type Store struct {
 // New creates a store whose defaults come from cfg. Call Load before use.
 func New(pool *pgxpool.Pool, cfg config.Config) *Store {
 	d := Values{Name: cfg.InstanceName, Description: cfg.InstanceDescription, Registration: cfg.Registration,
-		EmailVerification: cfg.EmailVerification, TermsURL: cfg.TermsURL, PrivacyURL: cfg.PrivacyURL, Contact: cfg.Contact}
+		EmailVerification: cfg.EmailVerification, TermsURL: cfg.TermsURL, PrivacyURL: cfg.PrivacyURL, Contact: cfg.Contact, Sharing: cfg.Sharing}
 	return &Store{pool: pool, emailAvailable: cfg.EmailAvailable(), defaults: d, effective: d}
 }
 
@@ -266,6 +270,10 @@ func validate(api, v string) error {
 	case "contact":
 		if utf8.RuneCountInString(v) > 200 {
 			return apierr.Validation("contact must be at most 200 characters")
+		}
+	case "sharing":
+		if v != config.SharingEnabled && v != config.SharingDisabled {
+			return apierr.Validation("sharing must be enabled or disabled")
 		}
 	}
 	return nil

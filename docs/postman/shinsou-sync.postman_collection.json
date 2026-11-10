@@ -129,6 +129,10 @@
     {
       "key": "inviteId",
       "value": ""
+    },
+    {
+      "key": "shareId",
+      "value": ""
     }
   ],
   "item": [
@@ -1392,6 +1396,603 @@
       ]
     },
     {
+      "name": "Social",
+      "description": "Follows, blocks and sharing works between accounts on the same server (docs/spec/sharing.md). Set targetUserId to another account first, for example from Search users. The share endpoints answer 403 feature_disabled while the operator has sharing turned off.",
+      "item": [
+        {
+          "name": "Search users",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/users?q=de&limit=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "users"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "de"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "Active accounts whose user name starts with q. The caller and accounts that blocked the caller are never listed."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const u = pm.response.json().users;",
+                  "pm.test('has users array', () => pm.expect(u).to.be.an('array'));",
+                  "if (u.length && !pm.collectionVariables.get('targetUserId')) pm.collectionVariables.set('targetUserId', u[0].id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List following",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/me/following?offset=0&limit=50",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "me",
+                "following"
+              ],
+              "query": [
+                {
+                  "key": "offset",
+                  "value": "0"
+                },
+                {
+                  "key": "limit",
+                  "value": "50"
+                }
+              ]
+            },
+            "description": "Accounts the caller follows, newest first."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Follow user",
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/me/following/{{targetUserId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "me",
+                "following",
+                "{{targetUserId}}"
+              ]
+            },
+            "description": "Idempotent. 404 when the account does not exist, is suspended or blocks the caller; 409 user_blocked when the caller blocks it."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Unfollow user",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/me/following/{{targetUserId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "me",
+                "following",
+                "{{targetUserId}}"
+              ]
+            },
+            "description": "Idempotent."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List followers",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/me/followers?offset=0&limit=50",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "me",
+                "followers"
+              ],
+              "query": [
+                {
+                  "key": "offset",
+                  "value": "0"
+                },
+                {
+                  "key": "limit",
+                  "value": "50"
+                }
+              ]
+            },
+            "description": "Accounts that follow the caller, newest first."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List blocks",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/me/blocks?offset=0&limit=50",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "me",
+                "blocks"
+              ],
+              "query": [
+                {
+                  "key": "offset",
+                  "value": "0"
+                },
+                {
+                  "key": "limit",
+                  "value": "50"
+                }
+              ]
+            },
+            "description": "Accounts the caller blocks, newest first."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Block user",
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/me/blocks/{{targetUserId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "me",
+                "blocks",
+                "{{targetUserId}}"
+              ]
+            },
+            "description": "Idempotent. Both accounts stop following each other and the open shares from the blocked account are dismissed."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Unblock user",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/me/blocks/{{targetUserId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "me",
+                "blocks",
+                "{{targetUserId}}"
+              ]
+            },
+            "description": "Idempotent. Follows are not restored."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get sharing preferences",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/me/sharing",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "me",
+                "sharing"
+              ]
+            },
+            "description": "Who may share works with the caller."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('has receiveFrom', () => pm.expect(pm.response.json().receiveFrom).to.be.oneOf(['everyone','following','nobody']));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update sharing preferences",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/me/sharing",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "me",
+                "sharing"
+              ]
+            },
+            "description": "receiveFrom: everyone | following | nobody.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"receiveFrom\": \"following\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List shares",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/shares?box=inbox&offset=0&limit=50",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "shares"
+              ],
+              "query": [
+                {
+                  "key": "box",
+                  "value": "inbox"
+                },
+                {
+                  "key": "offset",
+                  "value": "0"
+                },
+                {
+                  "key": "limit",
+                  "value": "50"
+                }
+              ]
+            },
+            "description": "box: inbox (default) or sent. status: pending, accepted or dismissed. A sender never sees that a share was dismissed."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const s = pm.response.json();",
+                  "pm.test('has pending count', () => pm.expect(s.pending).to.be.a('number'));",
+                  "if (s.shares.length) pm.collectionVariables.set('shareId', s.shares[0].id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create share",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/shares",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "shares"
+              ]
+            },
+            "description": "The work must be in the caller's library. 201 for a new share, 200 when the same share is still open. 403 share_refused, 409 user_blocked, 422 unknown_work, 429 rate_limited.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"recipientId\": \"{{targetUserId}}\",\n  \"work\": \"{{workHash}}\",\n  \"message\": \"You will like this one.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200 or 201', () => pm.expect(pm.response.code).to.be.oneOf([200, 201]));",
+                  "if (pm.response.code < 300) pm.collectionVariables.set('shareId', pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Share summary",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/shares/summary",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "shares",
+                "summary"
+              ]
+            },
+            "description": "Number of received shares waiting for an answer."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('has pending', () => pm.expect(pm.response.json().pending).to.be.a('number'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Accept share",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/shares/{{shareId}}/accept",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "shares",
+                "{{shareId}}",
+                "accept"
+              ]
+            },
+            "description": "Recipient only. Adds the work to the caller's library and marks the share accepted; repeatable. 409 quota_exceeded when the library is full."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('accepted', () => pm.expect(pm.response.json().status).to.eql('accepted'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Dismiss share",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/shares/{{shareId}}/dismiss",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "shares",
+                "{{shareId}}",
+                "dismiss"
+              ]
+            },
+            "description": "Recipient only. 409 conflict when the share was accepted already."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200 or 409', () => pm.expect(pm.response.code).to.be.oneOf([200, 409]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete share",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/shares/{{shareId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "shares",
+                "{{shareId}}"
+              ]
+            },
+            "description": "Either side; removes the share for both."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
       "name": "Admin",
       "item": [
         {
@@ -1750,7 +2351,7 @@
               "mode": "raw",
               "raw": "{\n  \"name\": \"My Shinsou server\",\n  \"registration\": \"invite\",\n  \"contact\": null\n}"
             },
-            "description": "Takes effect immediately. null resets a key to its environment default. emailVerification=required needs SMTP (409 email_unavailable)."
+            "description": "Takes effect immediately. null resets a key to its environment default. sharing: enabled | disabled. emailVerification=required needs SMTP (409 email_unavailable)."
           },
           "event": [
             {

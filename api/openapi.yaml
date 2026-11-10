@@ -32,6 +32,7 @@ tags:
   - name: sync
   - name: web
   - name: library
+  - name: social
   - name: admin
 
 security:
@@ -825,6 +826,307 @@ paths:
         '401': { $ref: '#/components/responses/Error' }
         '403': { $ref: '#/components/responses/Error' }
 
+  /api/v1/users:
+    get:
+      tags: [social]
+      operationId: searchUsers
+      description: |
+        Finds active accounts on this server whose user name starts with `q` (case-insensitive).
+        The caller and accounts that blocked the caller are never listed. Limited per account;
+        429 `rate_limited` when exceeded.
+      parameters:
+        - { name: q, in: query, required: true, schema: { type: string, minLength: 1, maxLength: 32 } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 50, default: 20 } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserList' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/Error' }
+
+  /api/v1/me/following:
+    get:
+      tags: [social]
+      operationId: listFollowing
+      description: Accounts the caller follows, newest first.
+      parameters:
+        - { name: offset, in: query, schema: { type: integer, minimum: 0, default: 0 } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserPage' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+
+  /api/v1/me/following/{userId}:
+    parameters:
+      - { name: userId, in: path, required: true, schema: { type: string, format: uuid } }
+    put:
+      tags: [social]
+      operationId: followUser
+      description: |
+        Follows an account; repeating it changes nothing. 404 when the account does not exist, is
+        suspended or blocked the caller. 409 `user_blocked` while the caller blocks the account.
+      parameters:
+        - { $ref: '#/components/parameters/CsrfToken' }
+      responses:
+        '204': { description: Following }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+    delete:
+      tags: [social]
+      operationId: unfollowUser
+      parameters:
+        - { $ref: '#/components/parameters/CsrfToken' }
+      responses:
+        '204': { description: Not following (any more) }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+
+  /api/v1/me/followers:
+    get:
+      tags: [social]
+      operationId: listFollowers
+      description: Accounts that follow the caller, newest first.
+      parameters:
+        - { name: offset, in: query, schema: { type: integer, minimum: 0, default: 0 } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserPage' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+
+  /api/v1/me/blocks:
+    get:
+      tags: [social]
+      operationId: listBlocks
+      description: Accounts the caller blocks, newest first.
+      parameters:
+        - { name: offset, in: query, schema: { type: integer, minimum: 0, default: 0 } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserPage' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+
+  /api/v1/me/blocks/{userId}:
+    parameters:
+      - { name: userId, in: path, required: true, schema: { type: string, format: uuid } }
+    put:
+      tags: [social]
+      operationId: blockUser
+      description: |
+        Blocks an account; repeating it changes nothing. Both accounts stop following each other
+        and the open shares the blocked account sent to the caller are dismissed. The blocked
+        account can no longer find, follow or share with the caller. 404 when the account does
+        not exist.
+      parameters:
+        - { $ref: '#/components/parameters/CsrfToken' }
+      responses:
+        '204': { description: Blocked }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+    delete:
+      tags: [social]
+      operationId: unblockUser
+      parameters:
+        - { $ref: '#/components/parameters/CsrfToken' }
+      responses:
+        '204': { description: Not blocked (any more) }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+
+  /api/v1/me/sharing:
+    get:
+      tags: [social]
+      operationId: getSharingPreferences
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SharingPreferences' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+    put:
+      tags: [social]
+      operationId: setSharingPreferences
+      parameters:
+        - { $ref: '#/components/parameters/CsrfToken' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SharingPreferences' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SharingPreferences' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+
+  /api/v1/shares:
+    get:
+      tags: [social]
+      operationId: listShares
+      description: |
+        The caller's received (`inbox`) or sent shares, newest first. In the `sent` box a share
+        the recipient dismissed still reads `pending`: only acceptance is shown to the sender.
+        403 `feature_disabled` while the server has sharing turned off.
+      parameters:
+        - { name: box, in: query, schema: { type: string, enum: [inbox, sent], default: inbox } }
+        - { name: status, in: query, schema: { type: string, enum: [pending, accepted, dismissed] }, description: 'Only shares in this state; `dismissed` matches nothing in the `sent` box.' }
+        - { name: offset, in: query, schema: { type: integer, minimum: 0, default: 0 } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SharePage' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+    post:
+      tags: [social]
+      operationId: createShare
+      description: |
+        Shares a work from the caller's library with another account. Sending the same work to
+        the same account again while the first share is still open returns that share (200).
+
+        - 403 `feature_disabled`: sharing is turned off on this server.
+        - 403 `share_refused`: the recipient does not accept shares from the caller (their
+          preference, or they blocked the caller; the two are not told apart).
+        - 404 `not_found`: no such active account.
+        - 409 `user_blocked`: the caller blocks the recipient.
+        - 422 `unknown_work`: the work is not in the caller's library (entries imported from
+          local files cannot be shared).
+        - 429 `rate_limited`: too many shares; `retryAfterSeconds` says when to try again.
+      parameters:
+        - { $ref: '#/components/parameters/CsrfToken' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ShareRequest' }
+      responses:
+        '200':
+          description: The same share is already open
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Share' }
+        '201':
+          description: Shared
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Share' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/Error' }
+
+  /api/v1/shares/summary:
+    get:
+      tags: [social]
+      operationId: getShareSummary
+      description: How many received shares are waiting for an answer. Cheap; meant for a badge.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [pending]
+                properties:
+                  pending: { type: integer }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+
+  /api/v1/shares/{shareId}:
+    parameters:
+      - { name: shareId, in: path, required: true, schema: { type: string, format: uuid } }
+    delete:
+      tags: [social]
+      operationId: deleteShare
+      description: Removes a share for both sides. The sender uses it to take a share back, the recipient to clear the inbox.
+      parameters:
+        - { $ref: '#/components/parameters/CsrfToken' }
+      responses:
+        '204': { description: Deleted }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+
+  /api/v1/shares/{shareId}/accept:
+    parameters:
+      - { name: shareId, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [social]
+      operationId: acceptShare
+      description: |
+        Recipient only. Adds the work to the caller's library (a `library` record written by the
+        server, which reaches the caller's devices through the normal sync) and marks the share
+        accepted. Safe to repeat. 409 `quota_exceeded` when the library record does not fit the
+        account's quota.
+      parameters:
+        - { $ref: '#/components/parameters/CsrfToken' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Share' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+
+  /api/v1/shares/{shareId}/dismiss:
+    parameters:
+      - { name: shareId, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [social]
+      operationId: dismissShare
+      description: Recipient only. Marks an open share dismissed; the sender is not told. 409 `conflict` when it was accepted already.
+      parameters:
+        - { $ref: '#/components/parameters/CsrfToken' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Share' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+
 components:
   securitySchemes:
     bearer:
@@ -873,6 +1175,10 @@ components:
                 - invalid_token
                 - csrf_failed
                 - last_admin
+                - feature_disabled
+                - share_refused
+                - user_blocked
+                - unknown_work
                 - not_found
                 - username_taken
                 - email_taken
@@ -1192,6 +1498,25 @@ components:
         devices:
           type: array
           items: { $ref: '#/components/schemas/Device' }
+        social:
+          type: object
+          description: Sharing data; work descriptions of shares are inline.
+          required: [receiveFrom, following, followers, blocks, shares]
+          properties:
+            receiveFrom: { type: string, enum: [everyone, following, nobody] }
+            following:
+              type: array
+              items: { $ref: '#/components/schemas/ShareParty' }
+            followers:
+              type: array
+              items: { $ref: '#/components/schemas/ShareParty' }
+            blocks:
+              type: array
+              items: { $ref: '#/components/schemas/ShareParty' }
+            shares:
+              type: array
+              description: Sent and received shares, with the same sender-side masking as the API.
+              items: { $ref: '#/components/schemas/Share' }
         works:
           type: array
           description: Descriptions of the works the records refer to.
@@ -1333,7 +1658,7 @@ components:
 
     InstanceSettings:
       type: object
-      required: [name, description, registration, emailVerification, termsUrl, privacyUrl, contact]
+      required: [name, description, registration, emailVerification, termsUrl, privacyUrl, contact, sharing]
       properties:
         name: { type: string, minLength: 1, maxLength: 80 }
         description: { type: string, maxLength: 500 }
@@ -1342,6 +1667,7 @@ components:
         termsUrl: { type: [string, 'null'], format: uri }
         privacyUrl: { type: [string, 'null'], format: uri }
         contact: { type: [string, 'null'], maxLength: 200 }
+        sharing: { type: string, enum: [enabled, disabled], description: Whether users can share works with each other. }
 
     InstanceSettingsPatch:
       type: object
@@ -1355,6 +1681,7 @@ components:
         termsUrl: { type: [string, 'null'] }
         privacyUrl: { type: [string, 'null'] }
         contact: { type: [string, 'null'] }
+        sharing: { type: [string, 'null'], enum: [enabled, disabled, null] }
 
     AdminSettings:
       type: object
@@ -1384,3 +1711,84 @@ components:
         targetId: { type: [string, 'null'] }
         detail: { type: [object, 'null'] }
         createdAt: { type: integer, format: int64 }
+
+    UserSummary:
+      type: object
+      required: [id, username, following, followsYou, blocked, canShare]
+      properties:
+        id: { type: string, format: uuid }
+        username: { type: string }
+        following: { type: boolean, description: The caller follows this account. }
+        followsYou: { type: boolean, description: This account follows the caller. }
+        blocked: { type: boolean, description: The caller blocks this account. }
+        canShare: { type: boolean, description: A share from the caller would be accepted right now. }
+        since: { type: integer, format: int64, description: 'When the follow or block began (lists of follows and blocks only).' }
+
+    UserList:
+      type: object
+      required: [users]
+      properties:
+        users:
+          type: array
+          items: { $ref: '#/components/schemas/UserSummary' }
+
+    UserPage:
+      type: object
+      required: [users, total, offset, limit]
+      properties:
+        users:
+          type: array
+          items: { $ref: '#/components/schemas/UserSummary' }
+        total: { type: integer }
+        offset: { type: integer }
+        limit: { type: integer }
+
+    SharingPreferences:
+      type: object
+      required: [receiveFrom]
+      properties:
+        receiveFrom:
+          type: string
+          enum: [everyone, following, nobody]
+          description: Who may send the caller a share - everyone, only accounts the caller follows, or nobody.
+
+    ShareRequest:
+      type: object
+      required: [recipientId, work]
+      properties:
+        recipientId: { type: string, format: uuid }
+        work: { type: string, pattern: '^[0-9a-f]{64}$', description: Work hash; the work must be in the caller's library. }
+        message: { type: string, maxLength: 500, description: Plain text; shown to the recipient as is. }
+
+    ShareParty:
+      type: object
+      required: [id, username]
+      properties:
+        id: { type: string, format: uuid }
+        username: { type: string }
+
+    Share:
+      type: object
+      required: [id, sender, recipient, work, message, status, createdAt, inLibrary]
+      properties:
+        id: { type: string, format: uuid }
+        sender: { $ref: '#/components/schemas/ShareParty' }
+        recipient: { $ref: '#/components/schemas/ShareParty' }
+        work: { $ref: '#/components/schemas/WorkDescriptor' }
+        message: { type: string }
+        status: { type: string, enum: [pending, accepted, dismissed] }
+        createdAt: { type: integer, format: int64 }
+        respondedAt: { type: [integer, 'null'], format: int64, description: Recipient's view only. }
+        inLibrary: { type: boolean, description: The work is in the caller's library. }
+
+    SharePage:
+      type: object
+      required: [shares, total, offset, limit, pending]
+      properties:
+        shares:
+          type: array
+          items: { $ref: '#/components/schemas/Share' }
+        total: { type: integer }
+        offset: { type: integer }
+        limit: { type: integer }
+        pending: { type: integer, description: Received shares waiting for an answer, whatever the filter. }

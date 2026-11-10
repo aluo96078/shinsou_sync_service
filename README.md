@@ -16,10 +16,10 @@ Shinsou X 的開源同步伺服器，任何人都可以自行架設。使用者�
 |---|---|
 | `api/openapi.yaml` | HTTP API 規格（協定的單一事實來源） |
 | `api/vectors/` | 跨語言測試向量，伺服器（Go）與 App（Kotlin）都必須通過 |
-| `docs/spec/` | 作品鍵、同步語意、記錄內容、網頁前台與帳號管理（`web.md`）的規格 |
+| `docs/spec/` | 作品鍵、同步語意、記錄內容、網頁前台與帳號管理（`web.md`）、追蹤、封鎖與分享（`sharing.md`）的規格 |
 | `migrations/` | PostgreSQL 資料表遷移 |
 | `cmd/shinsou-server/` | 伺服器進入點（`serve`、`migrate`、`admin`） |
-| `internal/` | 伺服器實作：`config`、`db`、`auth`、`syncsvc`、`notify`、`jobs`、`httpapi`、`instance`、`mail`、`settings`、`library`、`account`、`admin` |
+| `internal/` | 伺服器實作：`config`、`db`、`auth`、`syncsvc`、`notify`、`jobs`、`httpapi`、`instance`、`mail`、`settings`、`library`、`account`、`admin`、`social` |
 | `web/` | 網頁前台（Vue 3 + Vite + TypeScript）；`npm run build` 輸出到 `web/dist`，由 `web/embed.go` 編進伺服器 |
 | `deploy/` | `docker-compose.yml`（伺服器＋PostgreSQL 16） |
 | `docs/postman/` | Postman 測試集合 |
@@ -69,13 +69,16 @@ go run ./cmd/shinsou-server migrate     # 只執行遷移
 | `SHINSOU_INSTANCE_NAME` | `Shinsou Sync` | 實例名稱；另有 `_DESCRIPTION`、`SHINSOU_TERMS_URL`、`SHINSOU_PRIVACY_URL`、`SHINSOU_CONTACT` |
 | `SHINSOU_AUTH_RATE_PER_MINUTE` / `_BURST` | `30` / `10` | 每個 IP 的登入類端點限流 |
 | `SHINSOU_PUSH_RATE_PER_MINUTE` / `_BURST` | `240` / `60` | 每位使用者的推送限流 |
+| `SHINSOU_SHARING` | `enabled` | 使用者之間分享作品：`enabled` 或 `disabled`。關閉時 `/api/v1/shares` 回 `403 feature_disabled`；追蹤、封鎖與搜尋不受影響 |
+| `SHINSOU_SHARES_PER_DAY` | `200` | 每位使用者 24 小時內可建立的分享數（`0` = 不限） |
+| `SHINSOU_SOCIAL_RATE_PER_MINUTE` / `_BURST` | `120` / `40` | 每位使用者的使用者搜尋與建立分享限流 |
 | `SHINSOU_JOB_INTERVAL` | `1h` | 背景工作間隔 |
 | `SHINSOU_TOMBSTONE_RETENTION` | `2160h`（90 天） | 墓碑保留時間 |
 | `SHINSOU_BATCH_RETENTION` | `24h` | 推送批次（冪等）保留時間 |
 | `SHINSOU_ACCESS_TOKEN_TTL` / `SHINSOU_REFRESH_TOKEN_TTL` | `15m` / `2160h` | 權杖有效期 |
 | `SHINSOU_LOG_LEVEL` | `info` | `debug`、`info`、`warn`、`error` |
 
-名稱、描述、註冊政策、信箱驗證政策、服務條款與隱私權政策網址、聯絡方式這幾項，管理員可在網頁後台於執行期間覆寫（立即生效、不需重啟）；環境變數是預設值，後台把某項重設即回到預設值。
+名稱、描述、註冊政策、信箱驗證政策、分享開關、服務條款與隱私權政策網址、聯絡方式這幾項，管理員可在網頁後台於執行期間覆寫（立即生效、不需重啟）；環境變數是預設值，後台把某項重設即回到預設值。
 
 ### 網頁前台
 
