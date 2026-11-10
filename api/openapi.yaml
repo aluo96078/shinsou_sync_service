@@ -9,8 +9,8 @@ info:
   description: |
     Instance discovery, accounts, devices and sync, plus what the web front end needs: cookie
     sessions, a read-only library view, account export and deletion, email verification,
-    password reset and the administration endpoints. Sharing and reviews are added in later
-    phases.
+    password reset and the administration endpoints, work sharing between accounts, and work
+    reviews with their moderation tools (docs/spec/reviews.md).
 
     While the instance requires a verified email address, an account without one (administrators
     excepted) gets 403 `email_unverified` from the sync and library endpoints.
@@ -33,6 +33,8 @@ tags:
   - name: web
   - name: library
   - name: social
+  - name: reviews
+  - name: moderation
   - name: admin
 
 security:
@@ -1127,6 +1129,513 @@ paths:
         '404': { $ref: '#/components/responses/Error' }
         '409': { $ref: '#/components/responses/Error' }
 
+  /api/v1/works/{hash}:
+    parameters:
+      - { $ref: '#/components/parameters/WorkHash' }
+    get:
+      tags: [reviews]
+      operationId: getWork
+      security: [{}, { bearer: [] }]
+      description: |
+        The work page: the work, the rating summary, the caller's own review and whether the work
+        is in the caller's library. Works the server has never seen (nobody synced them) and
+        malformed hashes are 404. Without a bearer token the request is served as a visitor when
+        the operator allows visitor browsing (`features.visitorBrowsing`; otherwise 401); a visitor
+        gets `inLibrary: false` and `myReview: null`. 403 `feature_disabled` while reviews are
+        turned off. Rules: docs/spec/reviews.md.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WorkPage' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+
+  /api/v1/works/{hash}/reviews:
+    parameters:
+      - { $ref: '#/components/parameters/WorkHash' }
+    get:
+      tags: [reviews]
+      operationId: listWorkReviews
+      security: [{}, { bearer: [] }]
+      description: |
+        Visible reviews of the work, plus the caller's own review even when it is hidden. Reviews
+        by accounts the caller blocks are left out. Same visitor rules as `getWork`.
+      parameters:
+        - { name: sort, in: query, schema: { type: string, enum: [newest, helpful], default: newest } }
+        - { name: offset, in: query, schema: { type: integer, minimum: 0, default: 0 } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReviewPage' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+
+  /api/v1/works/{hash}/review:
+    parameters:
+      - { $ref: '#/components/parameters/WorkHash' }
+    put:
+      tags: [reviews]
+      operationId: putReview
+      description: |
+        Writes or edits the caller's review of the work (one per account and work). 201 for the
+        first write, 200 for an edit. At least one of `rating` and `body` is required. The first
+        review needs the work to be in the caller's library (422 `unknown_work`); later edits do
+        not. Editing a hidden review does not make it visible again. 429 `rate_limited` when the
+        daily posting cap is reached.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReviewInput' }
+      responses:
+        '200':
+          description: Edited
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Review' }
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Review' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/Error' }
+    delete:
+      tags: [reviews]
+      operationId: deleteReview
+      description: Deletes the caller's own review with its replies, helpful votes and reports. 404 when there is none.
+      responses:
+        '204': { description: Deleted }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+
+  /api/v1/me/reviews:
+    get:
+      tags: [reviews]
+      operationId: listMyReviews
+      description: The caller's own reviews with their works, latest edit first. Hidden ones are included.
+      parameters:
+        - { name: offset, in: query, schema: { type: integer, minimum: 0, default: 0 } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReviewPage' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+
+  /api/v1/reviews/{reviewId}/helpful:
+    parameters:
+      - { $ref: '#/components/parameters/ReviewId' }
+    put:
+      tags: [reviews]
+      operationId: markReviewHelpful
+      description: Marks the review helpful; repeating it changes nothing. 422 on the caller's own review.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HelpfulVote' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/Error' }
+    delete:
+      tags: [reviews]
+      operationId: unmarkReviewHelpful
+      description: Takes the mark back; repeating it changes nothing.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HelpfulVote' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+
+  /api/v1/reviews/{reviewId}/replies:
+    parameters:
+      - { $ref: '#/components/parameters/ReviewId' }
+    get:
+      tags: [reviews]
+      operationId: listReplies
+      security: [{}, { bearer: [] }]
+      description: Replies to a review, oldest first. Same visitor rules as `getWork`. 404 when the caller cannot see the review.
+      parameters:
+        - { name: offset, in: query, schema: { type: integer, minimum: 0, default: 0 } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReplyPage' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+    post:
+      tags: [reviews]
+      operationId: createReply
+      description: |
+        Replies to a review (one level only). 403 `forbidden` when the review's author blocks the
+        caller. 429 `rate_limited` when the daily posting cap is reached.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReplyInput' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Reply' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/Error' }
+
+  /api/v1/replies/{replyId}:
+    parameters:
+      - { $ref: '#/components/parameters/ReplyId' }
+    delete:
+      tags: [reviews]
+      operationId: deleteReply
+      description: Deletes the caller's own reply. Anybody else's reply is 404.
+      responses:
+        '204': { description: Deleted }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+
+  /api/v1/reviews/{reviewId}/report:
+    parameters:
+      - { $ref: '#/components/parameters/ReviewId' }
+    post:
+      tags: [reviews]
+      operationId: reportReview
+      description: |
+        Reports a review to the moderators. 201 for a new report; 200 with the existing one when
+        the caller already has an open report on it. 422 on the caller's own review. 429
+        `rate_limited` when the daily report cap is reached.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReportInput' }
+      responses:
+        '200':
+          description: An open report by the caller exists already
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Report' }
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Report' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/Error' }
+
+  /api/v1/replies/{replyId}/report:
+    parameters:
+      - { $ref: '#/components/parameters/ReplyId' }
+    post:
+      tags: [reviews]
+      operationId: reportReply
+      description: Reports a reply to the moderators. Same rules as `reportReview`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReportInput' }
+      responses:
+        '200':
+          description: An open report by the caller exists already
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Report' }
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Report' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/Error' }
+
+  /api/v1/mod/reports:
+    get:
+      tags: [moderation]
+      operationId: modListReports
+      description: |
+        Reports for moderators and administrators (403 for everybody else). Open ones oldest
+        first, resolved ones latest first. `open` in the answer is the number of open reports,
+        whatever the filter. Works while reviews are turned off.
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [open, resolved], default: open } }
+        - { name: offset, in: query, schema: { type: integer, minimum: 0, default: 0 } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ModReportPage' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+
+  /api/v1/mod/reports/{reportId}/resolve:
+    parameters:
+      - { name: reportId, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [moderation]
+      operationId: modResolveReport
+      description: |
+        Answers a report: `dismiss` leaves the target alone, `hide` hides it, `delete` deletes it.
+        Every open report on the same target is closed with the same result. 409
+        `already_resolved` when it was answered already; 404 once its target is deleted.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ResolveRequest' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, resolution]
+                properties:
+                  status: { type: string, const: resolved }
+                  resolution: { type: string, enum: [dismissed, hidden, deleted] }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+
+  /api/v1/mod/reviews:
+    get:
+      tags: [moderation]
+      operationId: modListReviews
+      description: Reviews with the given status (hidden by default), each with its work and `hiddenReason`.
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [hidden, visible], default: hidden } }
+        - { name: offset, in: query, schema: { type: integer, minimum: 0, default: 0 } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReviewPage' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+
+  /api/v1/mod/reviews/{reviewId}:
+    parameters:
+      - { $ref: '#/components/parameters/ReviewId' }
+    delete:
+      tags: [moderation]
+      operationId: modDeleteReview
+      description: Deletes a review with everything attached to it and closes its open reports. The body is optional.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ModReason' }
+      responses:
+        '204': { description: Deleted }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+
+  /api/v1/mod/reviews/{reviewId}/hide:
+    parameters:
+      - { $ref: '#/components/parameters/ReviewId' }
+    post:
+      tags: [moderation]
+      operationId: modHideReview
+      description: Hides a review. The author still sees it, with the reason. Closes its open reports.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ModReasonRequired' }
+      responses:
+        '200':
+          description: The review after the change
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Review' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+
+  /api/v1/mod/reviews/{reviewId}/unhide:
+    parameters:
+      - { $ref: '#/components/parameters/ReviewId' }
+    post:
+      tags: [moderation]
+      operationId: modUnhideReview
+      description: Makes a hidden review visible again.
+      responses:
+        '200':
+          description: The review after the change
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Review' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+
+  /api/v1/mod/replies:
+    get:
+      tags: [moderation]
+      operationId: modListReplies
+      description: Replies with the given status (hidden by default).
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [hidden, visible], default: hidden } }
+        - { name: offset, in: query, schema: { type: integer, minimum: 0, default: 0 } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReplyPage' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+
+  /api/v1/mod/replies/{replyId}:
+    parameters:
+      - { $ref: '#/components/parameters/ReplyId' }
+    delete:
+      tags: [moderation]
+      operationId: modDeleteReply
+      description: Deletes a reply and closes its open reports. The body is optional.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ModReason' }
+      responses:
+        '204': { description: Deleted }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+
+  /api/v1/mod/replies/{replyId}/hide:
+    parameters:
+      - { $ref: '#/components/parameters/ReplyId' }
+    post:
+      tags: [moderation]
+      operationId: modHideReply
+      description: Hides a reply. The author still sees it, with the reason. Closes its open reports.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ModReasonRequired' }
+      responses:
+        '200':
+          description: The reply after the change
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Reply' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+
+  /api/v1/mod/replies/{replyId}/unhide:
+    parameters:
+      - { $ref: '#/components/parameters/ReplyId' }
+    post:
+      tags: [moderation]
+      operationId: modUnhideReply
+      description: Makes a hidden reply visible again.
+      responses:
+        '200':
+          description: The reply after the change
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Reply' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+
+  /api/v1/mod/users/{userId}/suspend:
+    parameters:
+      - { name: userId, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [moderation]
+      operationId: modSuspendUser
+      description: |
+        Suspends an account and signs out its devices; its reviews and replies disappear for
+        everybody else until it is restored. Moderators may suspend ordinary users,
+        administrators ordinary users and moderators. 403 `forbidden` for anything else
+        (administrators are managed in the admin area).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ModReasonRequired' }
+      responses:
+        '204': { description: Suspended }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+
+  /api/v1/mod/users/{userId}/unsuspend:
+    parameters:
+      - { name: userId, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [moderation]
+      operationId: modUnsuspendUser
+      description: Restores a suspended account. Same permissions as suspending.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ModReason' }
+      responses:
+        '204': { description: Restored }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+
 components:
   securitySchemes:
     bearer:
@@ -1141,6 +1650,22 @@ components:
       required: true
       schema: { type: string }
       description: Value of the `shinsou_csrf` cookie.
+    WorkHash:
+      name: hash
+      in: path
+      required: true
+      schema: { type: string, pattern: '^[0-9a-f]{64}$' }
+      description: Work key hash (docs/spec/work-key.md).
+    ReviewId:
+      name: reviewId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    ReplyId:
+      name: replyId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
 
   responses:
     Error:
@@ -1178,6 +1703,7 @@ components:
                 - feature_disabled
                 - share_refused
                 - user_blocked
+                - already_resolved
                 - unknown_work
                 - not_found
                 - username_taken
@@ -1222,6 +1748,7 @@ components:
           properties:
             sharing: { type: boolean }
             reviews: { type: boolean }
+            visitorBrowsing: { type: boolean, description: 'Signed-out visitors can read work pages and reviews. Only true while reviews are on as well.' }
             email: { type: boolean, description: True when the server can send mail (verification, password reset). }
 
     DeviceInfo:
@@ -1517,6 +2044,9 @@ components:
               type: array
               description: Sent and received shares, with the same sender-side masking as the API.
               items: { $ref: '#/components/schemas/Share' }
+        reviews:
+          description: Reviews, replies, helpful marks and reports of the account.
+          $ref: '#/components/schemas/ReviewExport'
         works:
           type: array
           description: Descriptions of the works the records refer to.
@@ -1658,7 +2188,7 @@ components:
 
     InstanceSettings:
       type: object
-      required: [name, description, registration, emailVerification, termsUrl, privacyUrl, contact, sharing]
+      required: [name, description, registration, emailVerification, termsUrl, privacyUrl, contact, sharing, reviews, visitorBrowsing]
       properties:
         name: { type: string, minLength: 1, maxLength: 80 }
         description: { type: string, maxLength: 500 }
@@ -1668,6 +2198,8 @@ components:
         privacyUrl: { type: [string, 'null'], format: uri }
         contact: { type: [string, 'null'], maxLength: 200 }
         sharing: { type: string, enum: [enabled, disabled], description: Whether users can share works with each other. }
+        reviews: { type: string, enum: [enabled, disabled], description: Whether users can write and read reviews. }
+        visitorBrowsing: { type: string, enum: [enabled, disabled], description: Whether signed-out visitors can read work pages and reviews (needs reviews enabled to take effect). }
 
     InstanceSettingsPatch:
       type: object
@@ -1682,6 +2214,8 @@ components:
         privacyUrl: { type: [string, 'null'] }
         contact: { type: [string, 'null'] }
         sharing: { type: [string, 'null'], enum: [enabled, disabled, null] }
+        reviews: { type: [string, 'null'], enum: [enabled, disabled, null] }
+        visitorBrowsing: { type: [string, 'null'], enum: [enabled, disabled, null] }
 
     AdminSettings:
       type: object
@@ -1792,3 +2326,205 @@ components:
         offset: { type: integer }
         limit: { type: integer }
         pending: { type: integer, description: Received shares waiting for an answer, whatever the filter. }
+
+    ReviewParty:
+      type: object
+      required: [id, username]
+      properties:
+        id: { type: string, format: uuid }
+        username: { type: string }
+
+    Review:
+      type: object
+      required: [id, author, rating, body, bodyHtml, spoiler, status, helpful, votedHelpful, replyCount, createdAt, updatedAt, edited, mine]
+      properties:
+        id: { type: string, format: uuid }
+        author: { $ref: '#/components/schemas/ReviewParty' }
+        rating: { type: [integer, 'null'], minimum: 1, maximum: 5 }
+        body: { type: string, description: 'Markdown subset as written (docs/spec/reviews.md section 4).' }
+        bodyHtml: { type: string, description: 'The body as HTML, made by the server; safe to insert as is.' }
+        spoiler: { type: boolean, description: The author marked the review as containing spoilers; clients fold it by default. }
+        status: { type: string, enum: [visible, hidden] }
+        hiddenReason: { type: string, description: Only given to the author and to moderators. }
+        helpful: { type: integer }
+        votedHelpful: { type: boolean }
+        replyCount: { type: integer }
+        createdAt: { type: integer, format: int64 }
+        updatedAt: { type: integer, format: int64 }
+        edited: { type: boolean }
+        mine: { type: boolean }
+        work: { $ref: '#/components/schemas/WorkDescriptor' }
+
+    ReviewPage:
+      type: object
+      required: [reviews, total, offset, limit]
+      properties:
+        reviews:
+          type: array
+          items: { $ref: '#/components/schemas/Review' }
+        total: { type: integer }
+        offset: { type: integer }
+        limit: { type: integer }
+
+    ReviewRating:
+      type: object
+      required: [average, count]
+      properties:
+        average: { type: [number, 'null'], description: 'Mean of the visible ratings to two decimals; null when there are none.' }
+        count: { type: integer, description: Visible reviews that carry a rating. }
+
+    WorkPage:
+      type: object
+      required: [work, rating, reviewCount, myReview, inLibrary]
+      properties:
+        work: { $ref: '#/components/schemas/WorkDescriptor' }
+        rating: { $ref: '#/components/schemas/ReviewRating' }
+        reviewCount: { type: integer, description: Visible reviews, with or without a rating. }
+        myReview:
+          oneOf:
+            - $ref: '#/components/schemas/Review'
+            - type: 'null'
+        inLibrary: { type: boolean }
+
+    ReviewInput:
+      type: object
+      description: At least one of `rating` and `body` must be given.
+      properties:
+        rating: { type: [integer, 'null'], minimum: 1, maximum: 5 }
+        body: { type: string, maxLength: 5000, description: Counted in Unicode code points; surrounding whitespace is trimmed. }
+        spoiler: { type: boolean, default: false }
+
+    Reply:
+      type: object
+      required: [id, reviewId, author, body, bodyHtml, status, createdAt, mine]
+      properties:
+        id: { type: string, format: uuid }
+        reviewId: { type: string, format: uuid }
+        author: { $ref: '#/components/schemas/ReviewParty' }
+        body: { type: string }
+        bodyHtml: { type: string, description: Safe to insert as is. }
+        status: { type: string, enum: [visible, hidden] }
+        hiddenReason: { type: string, description: Only given to the author and to moderators. }
+        createdAt: { type: integer, format: int64 }
+        mine: { type: boolean }
+
+    ReplyPage:
+      type: object
+      required: [replies, total, offset, limit]
+      properties:
+        replies:
+          type: array
+          items: { $ref: '#/components/schemas/Reply' }
+        total: { type: integer }
+        offset: { type: integer }
+        limit: { type: integer }
+
+    ReplyInput:
+      type: object
+      required: [body]
+      properties:
+        body: { type: string, minLength: 1, maxLength: 2000 }
+
+    HelpfulVote:
+      type: object
+      required: [helpful, votedHelpful]
+      properties:
+        helpful: { type: integer }
+        votedHelpful: { type: boolean }
+
+    ReportReason:
+      type: string
+      enum: [spam, harassment, spoiler, illegal, other]
+
+    ReportInput:
+      type: object
+      required: [reason]
+      properties:
+        reason: { $ref: '#/components/schemas/ReportReason' }
+        note: { type: string, maxLength: 500 }
+
+    Report:
+      type: object
+      required: [id, reason, note, status, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        reviewId: { type: string, format: uuid }
+        replyId: { type: string, format: uuid }
+        reason: { $ref: '#/components/schemas/ReportReason' }
+        note: { type: string }
+        status: { type: string, enum: [open, resolved] }
+        createdAt: { type: integer, format: int64 }
+
+    ModReport:
+      type: object
+      required: [id, reporter, targetType, reason, note, status, resolution, resolvedBy, resolvedAt, createdAt, review]
+      properties:
+        id: { type: string, format: uuid }
+        reporter: { $ref: '#/components/schemas/ReviewParty' }
+        targetType: { type: string, enum: [review, reply] }
+        reason: { $ref: '#/components/schemas/ReportReason' }
+        note: { type: string }
+        status: { type: string, enum: [open, resolved] }
+        resolution: { type: [string, 'null'], enum: [dismissed, hidden, deleted, null] }
+        resolvedBy:
+          oneOf:
+            - $ref: '#/components/schemas/ReviewParty'
+            - type: 'null'
+        resolvedAt: { type: [integer, 'null'], format: int64 }
+        createdAt: { type: integer, format: int64 }
+        review:
+          description: The reported review, or the review the reported reply belongs to (with its work).
+          oneOf:
+            - $ref: '#/components/schemas/Review'
+            - type: 'null'
+        reply:
+          description: The reported reply (reports on replies only).
+          $ref: '#/components/schemas/Reply'
+
+    ModReportPage:
+      type: object
+      required: [reports, total, offset, limit, open]
+      properties:
+        reports:
+          type: array
+          items: { $ref: '#/components/schemas/ModReport' }
+        total: { type: integer }
+        offset: { type: integer }
+        limit: { type: integer }
+        open: { type: integer, description: Open reports in all, whatever the filter. }
+
+    ResolveRequest:
+      type: object
+      required: [action]
+      properties:
+        action: { type: string, enum: [dismiss, hide, delete] }
+
+    ModReason:
+      type: object
+      properties:
+        reason: { type: string, maxLength: 500 }
+
+    ModReasonRequired:
+      type: object
+      required: [reason]
+      properties:
+        reason: { type: string, minLength: 1, maxLength: 500 }
+
+    ReviewExport:
+      type: object
+      description: The caller's reviews data.
+      required: [reviews, replies, helpfulVotes, reports]
+      properties:
+        reviews:
+          type: array
+          items: { $ref: '#/components/schemas/Review' }
+        replies:
+          type: array
+          items: { $ref: '#/components/schemas/Reply' }
+        helpfulVotes:
+          type: array
+          description: Ids of the reviews the caller marked helpful.
+          items: { type: string, format: uuid }
+        reports:
+          type: array
+          items: { $ref: '#/components/schemas/Report' }

@@ -10,11 +10,21 @@ import type {
   Device,
   Instance,
   InstanceSettingsPatch,
+  HelpfulVote,
   Invite,
   LibraryDetail,
   LibraryPage,
+  ModReportPage,
   Paged,
   ReceiveFrom,
+  Reply,
+  ReplyPage,
+  Report,
+  ReportInput,
+  ResolveAction,
+  Review,
+  ReviewInput,
+  ReviewPage,
   Share,
   SharePage,
   ShareRequest,
@@ -27,6 +37,7 @@ import type {
   WebLoginRequest,
   WebRegisterRequest,
   WebSession,
+  WorkPage,
 } from './types'
 
 const V1 = '/api/v1'
@@ -151,6 +162,81 @@ const sharePath = (id: string) => `${V1}/shares/${encodeURIComponent(id)}`
 export const acceptShare = (id: string) => json<Share>('POST', `${sharePath(id)}/accept`)
 export const dismissShare = (id: string) => json<Share>('POST', `${sharePath(id)}/dismiss`)
 export const deleteShare = (id: string) => noContent('DELETE', sharePath(id))
+
+// --- reviews ----------------------------------------------------------------------------------
+
+export type ReviewSort = 'newest' | 'helpful'
+
+const workPath = (hash: string) => `${V1}/works/${encodeURIComponent(hash)}`
+const reviewPath = (id: string) => `${V1}/reviews/${encodeURIComponent(id)}`
+const replyPath = (id: string) => `${V1}/replies/${encodeURIComponent(id)}`
+
+// The three read endpoints below also work without a token while visitor browsing is on.
+export const getWork = (hash: string) => json<WorkPage>('GET', workPath(hash))
+
+export const listWorkReviews = (
+  hash: string,
+  query: { sort?: ReviewSort; offset?: number; limit?: number },
+) => json<ReviewPage>('GET', `${workPath(hash)}/reviews`, { query: { ...query } })
+
+export const putReview = (hash: string, body: ReviewInput) =>
+  json<Review>('PUT', `${workPath(hash)}/review`, { body })
+
+export const deleteReview = (hash: string) => noContent('DELETE', `${workPath(hash)}/review`)
+
+export const listMyReviews = (query: { offset?: number; limit?: number }) =>
+  json<ReviewPage>('GET', `${V1}/me/reviews`, { query: { ...query } })
+
+export const markHelpful = (reviewId: string) =>
+  json<HelpfulVote>('PUT', `${reviewPath(reviewId)}/helpful`)
+export const unmarkHelpful = (reviewId: string) =>
+  json<HelpfulVote>('DELETE', `${reviewPath(reviewId)}/helpful`)
+
+export const listReplies = (reviewId: string, query: { offset?: number; limit?: number }) =>
+  json<ReplyPage>('GET', `${reviewPath(reviewId)}/replies`, { query: { ...query } })
+
+export const createReply = (reviewId: string, body: string) =>
+  json<Reply>('POST', `${reviewPath(reviewId)}/replies`, { body: { body } })
+
+export const deleteReply = (replyId: string) => noContent('DELETE', replyPath(replyId))
+
+export const reportReview = (reviewId: string, body: ReportInput) =>
+  json<Report>('POST', `${reviewPath(reviewId)}/report`, { body })
+export const reportReply = (replyId: string, body: ReportInput) =>
+  json<Report>('POST', `${replyPath(replyId)}/report`, { body })
+
+// --- moderation ------------------------------------------------------------------------------
+
+const MOD = `${V1}/mod`
+
+export const modListReports = (query: { status?: 'open' | 'resolved'; offset?: number; limit?: number }) =>
+  json<ModReportPage>('GET', `${MOD}/reports`, { query: { ...query } })
+
+export const modResolveReport = (id: string, action: ResolveAction) =>
+  json<{ status: 'resolved'; resolution: 'dismissed' | 'hidden' | 'deleted' }>(
+    'POST',
+    `${MOD}/reports/${encodeURIComponent(id)}/resolve`,
+    { body: { action } },
+  )
+
+export const modListReviews = (query: { status?: 'hidden' | 'visible'; offset?: number; limit?: number }) =>
+  json<ReviewPage>('GET', `${MOD}/reviews`, { query: { ...query } })
+export const modListReplies = (query: { status?: 'hidden' | 'visible'; offset?: number; limit?: number }) =>
+  json<ReplyPage>('GET', `${MOD}/replies`, { query: { ...query } })
+
+export const modUnhideReview = (id: string) =>
+  json<Review>('POST', `${MOD}/reviews/${encodeURIComponent(id)}/unhide`)
+export const modUnhideReply = (id: string) =>
+  json<Reply>('POST', `${MOD}/replies/${encodeURIComponent(id)}/unhide`)
+export const modDeleteReview = (id: string, reason?: string) =>
+  noContent('DELETE', `${MOD}/reviews/${encodeURIComponent(id)}`, reason ? { body: { reason } } : {})
+export const modDeleteReply = (id: string, reason?: string) =>
+  noContent('DELETE', `${MOD}/replies/${encodeURIComponent(id)}`, reason ? { body: { reason } } : {})
+
+export const modSuspendUser = (id: string, reason: string) =>
+  noContent('POST', `${MOD}/users/${encodeURIComponent(id)}/suspend`, { body: { reason } })
+export const modUnsuspendUser = (id: string) =>
+  noContent('POST', `${MOD}/users/${encodeURIComponent(id)}/unsuspend`)
 
 // --- admin -----------------------------------------------------------------------------------
 

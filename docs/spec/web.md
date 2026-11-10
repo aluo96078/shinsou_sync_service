@@ -73,6 +73,7 @@ HTTP 介面以 [`api/openapi.yaml`](../../api/openapi.yaml) 為準；本文件�
 
 `name`、`description`、`registration`、`emailVerification`、`termsUrl`、`privacyUrl`、`contact` 可由管理員在執行期間覆寫。
 
+- 分享（`sharing`）、評論（`reviews`）與訪客瀏覽（`visitorBrowsing`）三個開關同樣可在管理後台覆寫，值為 `enabled` 或 `disabled`；規則見 [sharing.md](sharing.md) 與 [reviews.md](reviews.md)。後台在評論關閉時停用訪客瀏覽的選項。
 - 環境變數提供預設值；覆寫值存於 `instance_settings`（鍵 `name`、`description`、`registration`、`email_verification`、`terms_url`、`privacy_url`、`contact`），存在時優先。`PATCH /admin/settings` 對某個鍵送 `null` 即刪除覆寫、回到預設。
 - 伺服器在記憶體中保存目前的有效值，啟動時載入、每次 `PATCH` 後更新；註冊、驗證政策與實例資訊都讀這份有效值，變更立即生效，不需重啟。（伺服器是單一行程，與即時通知相同的前提。）
 - 驗證：`name` 1–80 字元；`description` 最多 500；`termsUrl`、`privacyUrl` 必須是 `http(s)://` 絕對網址、最長 2048，空字串視為「無」；`contact` 最長 200。
@@ -121,4 +122,5 @@ HTTP 介面以 [`api/openapi.yaml`](../../api/openapi.yaml) 為準；本文件�
   - `Content-Security-Policy: default-src 'self'; img-src 'self' https: data:; style-src 'self' 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'`
   - `X-Frame-Options: DENY`
   - `Referrer-Policy: no-referrer`
+- 前端路由（評論相關）：`/works/<作品雜湊>` 作品頁與評論；`/reviews` 我的評論（`features.reviews` 為 `true` 時才出現在導覽列）；`/mod` 評論管理（角色 `moderator`、`admin` 才有導覽項目，其他人看到找不到頁面）。作品頁是唯一不強制登入的路由：未登入時，只有 `features.visitorBrowsing` 為 `true` 才能進入（唯讀，並提示登入），否則導向登入頁。書庫條目頁在 `features.reviews` 為 `true` 時顯示「評論」連結。
 - 封面圖片直接由瀏覽器向來源載入（`referrerpolicy="no-referrer"`），伺服器不代抓；載入失敗時顯示預留圖。

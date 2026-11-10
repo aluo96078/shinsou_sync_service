@@ -25,6 +25,10 @@ export function loadInstance(force = false): Promise<void> {
 export const setupPending = computed(() => instance.value?.setupPending === true)
 export const emailFeature = computed(() => instance.value?.features?.email === true)
 export const sharingFeature = computed(() => instance.value?.features?.sharing === true)
+export const reviewsFeature = computed(() => instance.value?.features?.reviews === true)
+export const visitorBrowsingFeature = computed(
+  () => reviewsFeature.value && instance.value?.features?.visitorBrowsing === true,
+)
 export const registrationMode = computed(() => instance.value?.registration ?? 'open')
 export const verificationPolicy = computed(() => instance.value?.emailVerification ?? 'disabled')
 /** Whether the register page should be offered. */

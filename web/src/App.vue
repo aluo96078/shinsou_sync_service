@@ -5,7 +5,8 @@ import { logout } from '@/api/auth'
 import { session } from '@/api/session'
 import { LOCALES, LOCALE_NAMES, errorMessage, formatNumber, locale, setLocale, t, type Locale, type MessageKey } from '@/i18n'
 import { THEMES, setTheme, theme, type ThemeChoice } from '@/stores/theme'
-import { instanceName, sharingFeature, verificationPolicy } from '@/stores/instance'
+import { instanceName, reviewsFeature, sharingFeature, verificationPolicy } from '@/stores/instance'
+import { loginLocation } from '@/router'
 import { clearPendingShares, pendingShares, refreshPendingShares } from '@/stores/shares'
 import { useResendVerification } from '@/lib/useResend'
 
@@ -14,6 +15,7 @@ const router = useRouter()
 
 const user = computed(() => session.user)
 const isAdmin = computed(() => user.value?.role === 'admin')
+const isModerator = computed(() => user.value?.role === 'moderator' || isAdmin.value)
 
 const titleKeys: Record<string, MessageKey> = {
   login: 'login.title',
@@ -27,6 +29,9 @@ const titleKeys: Record<string, MessageKey> = {
   shares: 'social.nav.inbox',
   'shares-sent': 'social.nav.sent',
   people: 'social.nav.people',
+  work: 'work.title',
+  'my-reviews': 'reviews.title',
+  mod: 'mod.title',
   admin: 'admin.title',
   'admin-users': 'admin.nav.users',
   'admin-invites': 'admin.nav.invites',
@@ -96,6 +101,8 @@ function onTheme(e: Event): void {
           {{ t('nav.sharing') }}
           <span v-if="pendingShares > 0" class="badge badge-accent" :aria-label="t('nav.pendingShares', { n: pendingShares })">{{ formatNumber(pendingShares) }}</span>
         </RouterLink>
+        <RouterLink v-if="reviewsFeature" :to="{ name: 'my-reviews' }">{{ t('nav.reviews') }}</RouterLink>
+        <RouterLink v-if="isModerator" :to="{ name: 'mod' }">{{ t('nav.moderation') }}</RouterLink>
         <RouterLink :to="{ name: 'devices' }">{{ t('nav.devices') }}</RouterLink>
         <RouterLink :to="{ name: 'account' }">{{ t('nav.account') }}</RouterLink>
         <RouterLink v-if="isAdmin" :to="{ name: 'admin' }">{{ t('nav.admin') }}</RouterLink>
@@ -112,6 +119,9 @@ function onTheme(e: Event): void {
         <button v-if="user" type="button" class="btn btn-small" @click="signOut">
           {{ t('nav.signOut') }}
         </button>
+        <RouterLink v-else-if="route.meta.visitor" class="btn btn-small" :to="loginLocation(route.fullPath)">
+          {{ t('nav.signIn') }}
+        </RouterLink>
       </div>
     </div>
   </header>

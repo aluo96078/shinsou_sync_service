@@ -8,7 +8,7 @@ import CoverImage from '@/components/CoverImage.vue'
 import ErrorNote from '@/components/ErrorNote.vue'
 import ShareDialog from '@/components/ShareDialog.vue'
 import UnverifiedNotice from '@/components/UnverifiedNotice.vue'
-import { sharingFeature } from '@/stores/instance'
+import { reviewsFeature, sharingFeature } from '@/stores/instance'
 import { errorMessage, formatDate, formatDateTime, formatNumber, formatPercent, t } from '@/i18n'
 
 const CHUNK = 200
@@ -141,6 +141,9 @@ function yesNo(v: boolean): string {
           <p v-if="detail.local" class="hint">{{ $t('detail.localHint') }}</p>
           <p v-if="shareWork">
             <button type="button" class="btn" @click="sharing = true; shareNotice = null">{{ $t('share.button') }}</button>
+          </p>
+          <p v-if="reviewsFeature && detail.work?.hash">
+            <RouterLink class="btn" :to="{ name: 'work', params: { hash: detail.work.hash } }">{{ $t('detail.reviews') }}</RouterLink>
           </p>
           <ErrorNote :message="shareNotice" kind="success" />
 

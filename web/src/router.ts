@@ -1,7 +1,14 @@
-import { createRouter, createWebHistory, type RouteLocationRaw, type RouteRecordRaw } from 'vue-router'
+import {
+  createRouter,
+  createWebHistory,
+  type RouteLocationNormalized,
+  type RouteLocationRaw,
+  type RouteRecordRaw,
+} from 'vue-router'
 import { sessionReady } from '@/api/auth'
 import { session } from '@/api/session'
 import { redirectOrHome } from '@/lib/redirect'
+import { loadInstance, visitorBrowsingFeature } from '@/stores/instance'
 
 declare module 'vue-router' {
   interface RouteMeta {
@@ -11,6 +18,10 @@ declare module 'vue-router' {
     guest?: boolean
     /** Needs role admin; everybody else gets the not-found page. */
     admin?: boolean
+    /** Needs role moderator or admin; everybody else gets the not-found page. */
+    moderator?: boolean
+    /** Open to signed-out visitors while the server allows visitor browsing; otherwise it needs a sign-in. */
+    visitor?: boolean
   }
 }
 
@@ -27,6 +38,9 @@ const routes: RouteRecordRaw[] = [
   { path: '/shares', name: 'shares', component: () => import('@/views/SharesView.vue'), props: { box: 'inbox' }, meta: { auth: true } },
   { path: '/shares/sent', name: 'shares-sent', component: () => import('@/views/SharesView.vue'), props: { box: 'sent' }, meta: { auth: true } },
   { path: '/people', name: 'people', component: () => import('@/views/PeopleView.vue'), meta: { auth: true } },
+  { path: '/works/:hash([0-9a-f]{64})', name: 'work', component: () => import('@/views/WorkView.vue'), meta: { visitor: true } },
+  { path: '/reviews', name: 'my-reviews', component: () => import('@/views/MyReviewsView.vue'), meta: { auth: true } },
+  { path: '/mod', name: 'mod', component: () => import('@/views/ModView.vue'), meta: { auth: true, moderator: true } },
   { path: '/admin', name: 'admin', component: () => import('@/views/admin/AdminOverviewView.vue'), meta: { auth: true, admin: true } },
   { path: '/admin/users', name: 'admin-users', component: () => import('@/views/admin/AdminUsersView.vue'), meta: { auth: true, admin: true } },
   { path: '/admin/invites', name: 'admin-invites', component: () => import('@/views/admin/AdminInvitesView.vue'), meta: { auth: true, admin: true } },
@@ -51,19 +65,27 @@ export function loginLocation(fullPath: string): RouteLocationRaw {
   return dest === '/' ? { name: 'login' } : { name: 'login', query: { redirect: dest } }
 }
 
+/** Shows the not-found page without changing the address. */
+function notFoundLocation(to: RouteLocationNormalized): RouteLocationRaw {
+  return {
+    name: 'not-found',
+    params: { pathMatch: to.path.substring(1).split('/') },
+    query: to.query,
+    hash: to.hash,
+  }
+}
+
 router.beforeEach(async (to) => {
   await sessionReady()
   const user = session.user
   if (to.meta.auth && !user) return loginLocation(to.fullPath)
   if (to.meta.guest && user) return redirectOrHome(to.query.redirect)
-  if (to.meta.admin && user?.role !== 'admin') {
-    // Show the not-found page without changing the address.
-    return {
-      name: 'not-found',
-      params: { pathMatch: to.path.substring(1).split('/') },
-      query: to.query,
-      hash: to.hash,
-    }
+  if (to.meta.visitor && !user) {
+    // Signed-out visitors only get in while the server allows it.
+    await loadInstance()
+    if (!visitorBrowsingFeature.value) return loginLocation(to.fullPath)
   }
+  if (to.meta.admin && user?.role !== 'admin') return notFoundLocation(to)
+  if (to.meta.moderator && user?.role !== 'admin' && user?.role !== 'moderator') return notFoundLocation(to)
   return true
 })

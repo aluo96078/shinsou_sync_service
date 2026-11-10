@@ -115,6 +115,14 @@ export function formatNumber(n: number): string {
   return new Intl.NumberFormat(intlLocale.value).format(n)
 }
 
+/** A decimal number with exactly `digits` fraction digits at most and at least one. */
+export function formatDecimal(n: number, digits = 2): string {
+  return new Intl.NumberFormat(intlLocale.value, {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: digits,
+  }).format(n)
+}
+
 export function formatPercent(ratio: number): string {
   return new Intl.NumberFormat(intlLocale.value, {
     style: 'percent',

@@ -2,7 +2,7 @@
 
 Shinsou X 的開源同步伺服器，任何人都可以自行架設。使用者可以註冊帳號，把書庫、章節狀態、閱讀進度與分類同步到多台裝置；之後也會支援同一伺服器內的作品分享與書籍評論。
 
-> 狀態：P3（網頁前台與帳號管理）。帳號、裝置、同步（推送、拉取、即時通知）與背景清理之外，已加入網頁登入（cookie 工作階段）、電子郵件驗證與忘記密碼、唯讀書庫檢視、帳號匯出與刪除、管理後台（使用者、邀請碼、實例設定、稽核紀錄），以及編進執行檔的網頁前台；分享與評論尚未實作。
+> 狀態：P3（網頁前台與帳號管理）。帳號、裝置、同步（推送、拉取、即時通知）與背景清理之外，已加入網頁登入（cookie 工作階段）、電子郵件驗證與忘記密碼、唯讀書庫檢視、帳號匯出與刪除、管理後台（使用者、邀請碼、實例設定、稽核紀錄），以及編進執行檔的網頁前台；網頁前台也包含分享、作品頁與評論、版主的檢舉處理頁。
 
 ## 設計重點
 
@@ -16,7 +16,7 @@ Shinsou X 的開源同步伺服器，任何人都可以自行架設。使用者�
 |---|---|
 | `api/openapi.yaml` | HTTP API 規格（協定的單一事實來源） |
 | `api/vectors/` | 跨語言測試向量，伺服器（Go）與 App（Kotlin）都必須通過 |
-| `docs/spec/` | 作品鍵、同步語意、記錄內容、網頁前台與帳號管理（`web.md`）、追蹤、封鎖與分享（`sharing.md`）的規格 |
+| `docs/spec/` | 作品鍵、同步語意、記錄內容、網頁前台與帳號管理（`web.md`）、追蹤、封鎖與分享（`sharing.md`）、作品評論與管理（`reviews.md`）的規格 |
 | `migrations/` | PostgreSQL 資料表遷移 |
 | `cmd/shinsou-server/` | 伺服器進入點（`serve`、`migrate`、`admin`） |
 | `internal/` | 伺服器實作：`config`、`db`、`auth`、`syncsvc`、`notify`、`jobs`、`httpapi`、`instance`、`mail`、`settings`、`library`、`account`、`admin`、`social` |
@@ -72,13 +72,19 @@ go run ./cmd/shinsou-server migrate     # 只執行遷移
 | `SHINSOU_SHARING` | `enabled` | 使用者之間分享作品：`enabled` 或 `disabled`。關閉時 `/api/v1/shares` 回 `403 feature_disabled`；追蹤、封鎖與搜尋不受影響 |
 | `SHINSOU_SHARES_PER_DAY` | `200` | 每位使用者 24 小時內可建立的分享數（`0` = 不限） |
 | `SHINSOU_SOCIAL_RATE_PER_MINUTE` / `_BURST` | `120` / `40` | 每位使用者的使用者搜尋與建立分享限流 |
+| `SHINSOU_REVIEWS` | `enabled` | 作品評論：`enabled` 或 `disabled`。關閉時評論端點回 `403 feature_disabled`；已有的資料保留，`/api/v1/mod/*` 仍可使用 |
+| `SHINSOU_VISITOR_BROWSING` | `disabled` | 未登入者能否唯讀瀏覽作品頁與評論：`enabled` 或 `disabled`（評論關閉時無效） |
+| `SHINSOU_REVIEWS_PER_DAY` | `30` | 每位使用者 24 小時內可新增的評論與回覆合計（`0` = 不限） |
+| `SHINSOU_REPORTS_PER_DAY` | `20` | 每位使用者 24 小時內可提出的檢舉數（`0` = 不限） |
+| `SHINSOU_NEW_ACCOUNT_AGE` | `72h` | 註冊後多久以內算新帳號 |
+| `SHINSOU_NEW_ACCOUNT_POSTS_PER_DAY` | `5` | 新帳號 24 小時內可新增的評論與回覆合計（`0` = 不限） |
 | `SHINSOU_JOB_INTERVAL` | `1h` | 背景工作間隔 |
 | `SHINSOU_TOMBSTONE_RETENTION` | `2160h`（90 天） | 墓碑保留時間 |
 | `SHINSOU_BATCH_RETENTION` | `24h` | 推送批次（冪等）保留時間 |
 | `SHINSOU_ACCESS_TOKEN_TTL` / `SHINSOU_REFRESH_TOKEN_TTL` | `15m` / `2160h` | 權杖有效期 |
 | `SHINSOU_LOG_LEVEL` | `info` | `debug`、`info`、`warn`、`error` |
 
-名稱、描述、註冊政策、信箱驗證政策、分享開關、服務條款與隱私權政策網址、聯絡方式這幾項，管理員可在網頁後台於執行期間覆寫（立即生效、不需重啟）；環境變數是預設值，後台把某項重設即回到預設值。
+名稱、描述、註冊政策、信箱驗證政策、分享開關、評論開關、訪客瀏覽開關、服務條款與隱私權政策網址、聯絡方式這幾項，管理員可在網頁後台於執行期間覆寫（立即生效、不需重啟）；環境變數是預設值，後台把某項重設即回到預設值。
 
 ### 網頁前台
 

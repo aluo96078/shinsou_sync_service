@@ -17,7 +17,7 @@ import { loadInstance } from '@/stores/instance'
 
 const REGISTRATIONS: readonly Registration[] = ['open', 'invite', 'closed']
 const VERIFICATIONS: readonly EmailVerification[] = ['disabled', 'optional', 'required']
-const SHARING: readonly InstanceSettings['sharing'][] = ['enabled', 'disabled']
+const SWITCH: readonly InstanceSettings['sharing'][] = ['enabled', 'disabled']
 
 const settings = ref<AdminSettings | null>(null)
 const loadError = ref<string | null>(null)
@@ -34,6 +34,8 @@ const form = reactive({
   privacyUrl: '',
   contact: '',
   sharing: 'enabled' as InstanceSettings['sharing'],
+  reviews: 'enabled' as InstanceSettings['reviews'],
+  visitorBrowsing: 'disabled' as InstanceSettings['visitorBrowsing'],
 })
 
 function fillForm(v: InstanceSettings): void {
@@ -45,6 +47,8 @@ function fillForm(v: InstanceSettings): void {
   form.privacyUrl = v.privacyUrl ?? ''
   form.contact = v.contact ?? ''
   form.sharing = v.sharing
+  form.reviews = v.reviews
+  form.visitorBrowsing = v.visitorBrowsing
 }
 
 function apply(s: AdminSettings): void {
@@ -74,6 +78,10 @@ function defaultText(key: keyof InstanceSettings): string {
       return t(`emailVerification.${d.emailVerification}`)
     case 'sharing':
       return t(`sharing.${d.sharing}`)
+    case 'reviews':
+      return t(`sharing.${d.reviews}`)
+    case 'visitorBrowsing':
+      return t(`sharing.${d.visitorBrowsing}`)
     default:
       return d[key] ? String(d[key]) : t('admin.settings.empty')
   }
@@ -98,6 +106,8 @@ async function save(): Promise<void> {
   if (form.privacyUrl !== (v.privacyUrl ?? '')) patch.privacyUrl = form.privacyUrl
   if (form.contact !== (v.contact ?? '')) patch.contact = form.contact
   if (form.sharing !== v.sharing) patch.sharing = form.sharing
+  if (form.reviews !== v.reviews) patch.reviews = form.reviews
+  if (form.visitorBrowsing !== v.visitorBrowsing) patch.visitorBrowsing = form.visitorBrowsing
   if (Object.keys(patch).length === 0) {
     saved.value = t('admin.settings.noChanges')
     return
@@ -186,7 +196,30 @@ async function reset(key: keyof InstanceSettings): Promise<void> {
       <SettingRow :label="$t('admin.settings.sharing')" :overridden="isOverridden('sharing')" :default-text="defaultText('sharing')" :hint="$t('admin.settings.sharingHint')" :busy="resetAction.busy.value" @reset="reset('sharing')">
         <template #default="{ id, describedby }">
           <select :id="id" v-model="form.sharing" :aria-describedby="describedby">
-            <option v-for="s in SHARING" :key="s" :value="s">{{ $t(`sharing.${s}`) }}</option>
+            <option v-for="s in SWITCH" :key="s" :value="s">{{ $t(`sharing.${s}`) }}</option>
+          </select>
+        </template>
+      </SettingRow>
+
+      <SettingRow :label="$t('admin.settings.reviews')" :overridden="isOverridden('reviews')" :default-text="defaultText('reviews')" :hint="$t('admin.settings.reviewsHint')" :busy="resetAction.busy.value" @reset="reset('reviews')">
+        <template #default="{ id, describedby }">
+          <select :id="id" v-model="form.reviews" :aria-describedby="describedby">
+            <option v-for="s in SWITCH" :key="s" :value="s">{{ $t(`sharing.${s}`) }}</option>
+          </select>
+        </template>
+      </SettingRow>
+
+      <SettingRow
+        :label="$t('admin.settings.visitorBrowsing')"
+        :overridden="isOverridden('visitorBrowsing')"
+        :default-text="defaultText('visitorBrowsing')"
+        :hint="form.reviews === 'disabled' ? $t('admin.settings.visitorNeedsReviews') : $t('admin.settings.visitorBrowsingHint')"
+        :busy="resetAction.busy.value"
+        @reset="reset('visitorBrowsing')"
+      >
+        <template #default="{ id, describedby }">
+          <select :id="id" v-model="form.visitorBrowsing" :disabled="form.reviews === 'disabled'" :aria-describedby="describedby">
+            <option v-for="s in SWITCH" :key="s" :value="s">{{ $t(`sharing.${s}`) }}</option>
           </select>
         </template>
       </SettingRow>

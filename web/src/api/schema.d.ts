@@ -932,6 +932,439 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/works/{hash}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Work key hash (docs/spec/work-key.md). */
+                hash: components["parameters"]["WorkHash"];
+            };
+            cookie?: never;
+        };
+        /**
+         * @description The work page: the work, the rating summary, the caller's own review and whether the work
+         *     is in the caller's library. Works the server has never seen (nobody synced them) and
+         *     malformed hashes are 404. Without a bearer token the request is served as a visitor when
+         *     the operator allows visitor browsing (`features.visitorBrowsing`; otherwise 401); a visitor
+         *     gets `inLibrary: false` and `myReview: null`. 403 `feature_disabled` while reviews are
+         *     turned off. Rules: docs/spec/reviews.md.
+         */
+        get: operations["getWork"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/works/{hash}/reviews": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Work key hash (docs/spec/work-key.md). */
+                hash: components["parameters"]["WorkHash"];
+            };
+            cookie?: never;
+        };
+        /**
+         * @description Visible reviews of the work, plus the caller's own review even when it is hidden. Reviews
+         *     by accounts the caller blocks are left out. Same visitor rules as `getWork`.
+         */
+        get: operations["listWorkReviews"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/works/{hash}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Work key hash (docs/spec/work-key.md). */
+                hash: components["parameters"]["WorkHash"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * @description Writes or edits the caller's review of the work (one per account and work). 201 for the
+         *     first write, 200 for an edit. At least one of `rating` and `body` is required. The first
+         *     review needs the work to be in the caller's library (422 `unknown_work`); later edits do
+         *     not. Editing a hidden review does not make it visible again. 429 `rate_limited` when the
+         *     daily posting cap is reached.
+         */
+        put: operations["putReview"];
+        post?: never;
+        /** @description Deletes the caller's own review with its replies, helpful votes and reports. 404 when there is none. */
+        delete: operations["deleteReview"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/reviews": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The caller's own reviews with their works, latest edit first. Hidden ones are included. */
+        get: operations["listMyReviews"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reviews/{reviewId}/helpful": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                reviewId: components["parameters"]["ReviewId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /** @description Marks the review helpful; repeating it changes nothing. 422 on the caller's own review. */
+        put: operations["markReviewHelpful"];
+        post?: never;
+        /** @description Takes the mark back; repeating it changes nothing. */
+        delete: operations["unmarkReviewHelpful"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reviews/{reviewId}/replies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                reviewId: components["parameters"]["ReviewId"];
+            };
+            cookie?: never;
+        };
+        /** @description Replies to a review, oldest first. Same visitor rules as `getWork`. 404 when the caller cannot see the review. */
+        get: operations["listReplies"];
+        put?: never;
+        /**
+         * @description Replies to a review (one level only). 403 `forbidden` when the review's author blocks the
+         *     caller. 429 `rate_limited` when the daily posting cap is reached.
+         */
+        post: operations["createReply"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/replies/{replyId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                replyId: components["parameters"]["ReplyId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** @description Deletes the caller's own reply. Anybody else's reply is 404. */
+        delete: operations["deleteReply"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reviews/{reviewId}/report": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                reviewId: components["parameters"]["ReviewId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * @description Reports a review to the moderators. 201 for a new report; 200 with the existing one when
+         *     the caller already has an open report on it. 422 on the caller's own review. 429
+         *     `rate_limited` when the daily report cap is reached.
+         */
+        post: operations["reportReview"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/replies/{replyId}/report": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                replyId: components["parameters"]["ReplyId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Reports a reply to the moderators. Same rules as `reportReview`. */
+        post: operations["reportReply"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/mod/reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description Reports for moderators and administrators (403 for everybody else). Open ones oldest
+         *     first, resolved ones latest first. `open` in the answer is the number of open reports,
+         *     whatever the filter. Works while reviews are turned off.
+         */
+        get: operations["modListReports"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/mod/reports/{reportId}/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                reportId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * @description Answers a report: `dismiss` leaves the target alone, `hide` hides it, `delete` deletes it.
+         *     Every open report on the same target is closed with the same result. 409
+         *     `already_resolved` when it was answered already; 404 once its target is deleted.
+         */
+        post: operations["modResolveReport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/mod/reviews": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Reviews with the given status (hidden by default), each with its work and `hiddenReason`. */
+        get: operations["modListReviews"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/mod/reviews/{reviewId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                reviewId: components["parameters"]["ReviewId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** @description Deletes a review with everything attached to it and closes its open reports. The body is optional. */
+        delete: operations["modDeleteReview"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/mod/reviews/{reviewId}/hide": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                reviewId: components["parameters"]["ReviewId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Hides a review. The author still sees it, with the reason. Closes its open reports. */
+        post: operations["modHideReview"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/mod/reviews/{reviewId}/unhide": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                reviewId: components["parameters"]["ReviewId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Makes a hidden review visible again. */
+        post: operations["modUnhideReview"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/mod/replies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Replies with the given status (hidden by default). */
+        get: operations["modListReplies"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/mod/replies/{replyId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                replyId: components["parameters"]["ReplyId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** @description Deletes a reply and closes its open reports. The body is optional. */
+        delete: operations["modDeleteReply"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/mod/replies/{replyId}/hide": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                replyId: components["parameters"]["ReplyId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Hides a reply. The author still sees it, with the reason. Closes its open reports. */
+        post: operations["modHideReply"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/mod/replies/{replyId}/unhide": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                replyId: components["parameters"]["ReplyId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Makes a hidden reply visible again. */
+        post: operations["modUnhideReply"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/mod/users/{userId}/suspend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                userId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * @description Suspends an account and signs out its devices; its reviews and replies disappear for
+         *     everybody else until it is restored. Moderators may suspend ordinary users,
+         *     administrators ordinary users and moderators. 403 `forbidden` for anything else
+         *     (administrators are managed in the admin area).
+         */
+        post: operations["modSuspendUser"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/mod/users/{userId}/unsuspend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                userId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Restores a suspended account. Same permissions as suspending. */
+        post: operations["modUnsuspendUser"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -942,7 +1375,7 @@ export interface components {
                  * @description Stable machine-readable code; message is for humans and may change.
                  * @enum {string}
                  */
-                code: "bad_request" | "unauthorized" | "invalid_credentials" | "refresh_token_reused" | "forbidden" | "registration_closed" | "invite_required" | "email_unverified" | "email_required" | "email_unavailable" | "invalid_token" | "csrf_failed" | "last_admin" | "feature_disabled" | "share_refused" | "user_blocked" | "unknown_work" | "not_found" | "username_taken" | "email_taken" | "conflict" | "validation_failed" | "invalid_work_key" | "work_hash_mismatch" | "payload_too_large" | "quota_exceeded" | "rate_limited" | "resync_required" | "unsupported_api_version" | "internal";
+                code: "bad_request" | "unauthorized" | "invalid_credentials" | "refresh_token_reused" | "forbidden" | "registration_closed" | "invite_required" | "email_unverified" | "email_required" | "email_unavailable" | "invalid_token" | "csrf_failed" | "last_admin" | "feature_disabled" | "share_refused" | "user_blocked" | "already_resolved" | "unknown_work" | "not_found" | "username_taken" | "email_taken" | "conflict" | "validation_failed" | "invalid_work_key" | "work_hash_mismatch" | "payload_too_large" | "quota_exceeded" | "rate_limited" | "resync_required" | "unsupported_api_version" | "internal";
                 message: string;
                 retryAfterSeconds?: number;
             };
@@ -970,6 +1403,8 @@ export interface components {
             features: {
                 sharing: boolean;
                 reviews: boolean;
+                /** @description Signed-out visitors can read work pages and reviews. Only true while reviews are on as well. */
+                visitorBrowsing?: boolean;
                 /** @description True when the server can send mail (verification */
                 email?: boolean;
             };
@@ -1183,6 +1618,8 @@ export interface components {
                 /** @description Sent and received shares, with the same sender-side masking as the API. */
                 shares: components["schemas"]["Share"][];
             };
+            /** @description Reviews, replies, helpful marks and reports of the account. */
+            reviews?: components["schemas"]["ReviewExport"];
             /** @description Descriptions of the works the records refer to. */
             works: components["schemas"]["WorkDescriptor"][];
             records: (components["schemas"]["SyncRecord"] & {
@@ -1317,6 +1754,16 @@ export interface components {
              * @enum {string}
              */
             sharing: "enabled" | "disabled";
+            /**
+             * @description Whether users can write and read reviews.
+             * @enum {string}
+             */
+            reviews: "enabled" | "disabled";
+            /**
+             * @description Whether signed-out visitors can read work pages and reviews (needs reviews enabled to take effect).
+             * @enum {string}
+             */
+            visitorBrowsing: "enabled" | "disabled";
         };
         /** @description Only the keys that are present change. `null` resets a key to its environment default. */
         InstanceSettingsPatch: {
@@ -1331,6 +1778,10 @@ export interface components {
             contact?: string | null;
             /** @enum {string|null} */
             sharing?: "enabled" | "disabled" | null;
+            /** @enum {string|null} */
+            reviews?: "enabled" | "disabled" | null;
+            /** @enum {string|null} */
+            visitorBrowsing?: "enabled" | "disabled" | null;
         };
         AdminSettings: {
             values: components["schemas"]["InstanceSettings"];
@@ -1428,6 +1879,163 @@ export interface components {
             /** @description Received shares waiting for an answer */
             pending: number;
         };
+        ReviewParty: {
+            /** Format: uuid */
+            id: string;
+            username: string;
+        };
+        Review: {
+            /** Format: uuid */
+            id: string;
+            author: components["schemas"]["ReviewParty"];
+            rating: number | null;
+            /** @description Markdown subset as written (docs/spec/reviews.md section 4). */
+            body: string;
+            /** @description The body as HTML, made by the server; safe to insert as is. */
+            bodyHtml: string;
+            /** @description The author marked the review as containing spoilers; clients fold it by default. */
+            spoiler: boolean;
+            /** @enum {string} */
+            status: "visible" | "hidden";
+            /** @description Only given to the author and to moderators. */
+            hiddenReason?: string;
+            helpful: number;
+            votedHelpful: boolean;
+            replyCount: number;
+            /** Format: int64 */
+            createdAt: number;
+            /** Format: int64 */
+            updatedAt: number;
+            edited: boolean;
+            mine: boolean;
+            work?: components["schemas"]["WorkDescriptor"];
+        };
+        ReviewPage: {
+            reviews: components["schemas"]["Review"][];
+            total: number;
+            offset: number;
+            limit: number;
+        };
+        ReviewRating: {
+            /** @description Mean of the visible ratings to two decimals; null when there are none. */
+            average: number | null;
+            /** @description Visible reviews that carry a rating. */
+            count: number;
+        };
+        WorkPage: {
+            work: components["schemas"]["WorkDescriptor"];
+            rating: components["schemas"]["ReviewRating"];
+            /** @description Visible reviews */
+            reviewCount: number;
+            myReview: components["schemas"]["Review"] | null;
+            inLibrary: boolean;
+        };
+        /** @description At least one of `rating` and `body` must be given. */
+        ReviewInput: {
+            rating?: number | null;
+            /** @description Counted in Unicode code points; surrounding whitespace is trimmed. */
+            body?: string;
+            /** @default false */
+            spoiler: boolean;
+        };
+        Reply: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            reviewId: string;
+            author: components["schemas"]["ReviewParty"];
+            body: string;
+            /** @description Safe to insert as is. */
+            bodyHtml: string;
+            /** @enum {string} */
+            status: "visible" | "hidden";
+            /** @description Only given to the author and to moderators. */
+            hiddenReason?: string;
+            /** Format: int64 */
+            createdAt: number;
+            mine: boolean;
+        };
+        ReplyPage: {
+            replies: components["schemas"]["Reply"][];
+            total: number;
+            offset: number;
+            limit: number;
+        };
+        ReplyInput: {
+            body: string;
+        };
+        HelpfulVote: {
+            helpful: number;
+            votedHelpful: boolean;
+        };
+        /** @enum {string} */
+        ReportReason: "spam" | "harassment" | "spoiler" | "illegal" | "other";
+        ReportInput: {
+            reason: components["schemas"]["ReportReason"];
+            note?: string;
+        };
+        Report: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            reviewId?: string;
+            /** Format: uuid */
+            replyId?: string;
+            reason: components["schemas"]["ReportReason"];
+            note: string;
+            /** @enum {string} */
+            status: "open" | "resolved";
+            /** Format: int64 */
+            createdAt: number;
+        };
+        ModReport: {
+            /** Format: uuid */
+            id: string;
+            reporter: components["schemas"]["ReviewParty"];
+            /** @enum {string} */
+            targetType: "review" | "reply";
+            reason: components["schemas"]["ReportReason"];
+            note: string;
+            /** @enum {string} */
+            status: "open" | "resolved";
+            /** @enum {string|null} */
+            resolution: "dismissed" | "hidden" | "deleted" | null;
+            resolvedBy: components["schemas"]["ReviewParty"] | null;
+            /** Format: int64 */
+            resolvedAt: number | null;
+            /** Format: int64 */
+            createdAt: number;
+            /** @description The reported review, or the review the reported reply belongs to (with its work). */
+            review: components["schemas"]["Review"] | null;
+            /** @description The reported reply (reports on replies only). */
+            reply?: components["schemas"]["Reply"];
+        };
+        ModReportPage: {
+            reports: components["schemas"]["ModReport"][];
+            total: number;
+            offset: number;
+            limit: number;
+            /** @description Open reports in all */
+            open: number;
+        };
+        ResolveRequest: {
+            /** @enum {string} */
+            action: "dismiss" | "hide" | "delete";
+        };
+        ModReason: {
+            reason?: string;
+        };
+        ModReasonRequired: {
+            reason: string;
+        };
+        /** @description The caller's reviews data. */
+        ReviewExport: {
+            reviews: components["schemas"]["Review"][];
+            replies: components["schemas"]["Reply"][];
+            /** @description Ids of the reviews the caller marked helpful. */
+            helpfulVotes: string[];
+            reports: components["schemas"]["Report"][];
+        };
     };
     responses: {
         /** @description Error */
@@ -1443,6 +2051,10 @@ export interface components {
     parameters: {
         /** @description Value of the `shinsou_csrf` cookie. */
         CsrfToken: string;
+        /** @description Work key hash (docs/spec/work-key.md). */
+        WorkHash: string;
+        ReviewId: string;
+        ReplyId: string;
     };
     requestBodies: never;
     headers: never;
@@ -2927,6 +3539,703 @@ export interface operations {
             403: components["responses"]["Error"];
             404: components["responses"]["Error"];
             409: components["responses"]["Error"];
+        };
+    };
+    getWork: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Work key hash (docs/spec/work-key.md). */
+                hash: components["parameters"]["WorkHash"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkPage"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    listWorkReviews: {
+        parameters: {
+            query?: {
+                sort?: "newest" | "helpful";
+                offset?: number;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                /** @description Work key hash (docs/spec/work-key.md). */
+                hash: components["parameters"]["WorkHash"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReviewPage"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    putReview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Work key hash (docs/spec/work-key.md). */
+                hash: components["parameters"]["WorkHash"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReviewInput"];
+            };
+        };
+        responses: {
+            /** @description Edited */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Review"];
+                };
+            };
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Review"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            422: components["responses"]["Error"];
+            429: components["responses"]["Error"];
+        };
+    };
+    deleteReview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Work key hash (docs/spec/work-key.md). */
+                hash: components["parameters"]["WorkHash"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    listMyReviews: {
+        parameters: {
+            query?: {
+                offset?: number;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReviewPage"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+        };
+    };
+    markReviewHelpful: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                reviewId: components["parameters"]["ReviewId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HelpfulVote"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            422: components["responses"]["Error"];
+            429: components["responses"]["Error"];
+        };
+    };
+    unmarkReviewHelpful: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                reviewId: components["parameters"]["ReviewId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HelpfulVote"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    listReplies: {
+        parameters: {
+            query?: {
+                offset?: number;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                reviewId: components["parameters"]["ReviewId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReplyPage"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    createReply: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                reviewId: components["parameters"]["ReviewId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReplyInput"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Reply"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            422: components["responses"]["Error"];
+            429: components["responses"]["Error"];
+        };
+    };
+    deleteReply: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                replyId: components["parameters"]["ReplyId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    reportReview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                reviewId: components["parameters"]["ReviewId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReportInput"];
+            };
+        };
+        responses: {
+            /** @description An open report by the caller exists already */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Report"];
+                };
+            };
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Report"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            422: components["responses"]["Error"];
+            429: components["responses"]["Error"];
+        };
+    };
+    reportReply: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                replyId: components["parameters"]["ReplyId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReportInput"];
+            };
+        };
+        responses: {
+            /** @description An open report by the caller exists already */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Report"];
+                };
+            };
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Report"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            422: components["responses"]["Error"];
+            429: components["responses"]["Error"];
+        };
+    };
+    modListReports: {
+        parameters: {
+            query?: {
+                status?: "open" | "resolved";
+                offset?: number;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModReportPage"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+        };
+    };
+    modResolveReport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                reportId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResolveRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        status: "resolved";
+                        /** @enum {string} */
+                        resolution: "dismissed" | "hidden" | "deleted";
+                    };
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            409: components["responses"]["Error"];
+            422: components["responses"]["Error"];
+        };
+    };
+    modListReviews: {
+        parameters: {
+            query?: {
+                status?: "hidden" | "visible";
+                offset?: number;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReviewPage"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+        };
+    };
+    modDeleteReview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                reviewId: components["parameters"]["ReviewId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ModReason"];
+            };
+        };
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    modHideReview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                reviewId: components["parameters"]["ReviewId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ModReasonRequired"];
+            };
+        };
+        responses: {
+            /** @description The review after the change */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Review"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            422: components["responses"]["Error"];
+        };
+    };
+    modUnhideReview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                reviewId: components["parameters"]["ReviewId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The review after the change */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Review"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    modListReplies: {
+        parameters: {
+            query?: {
+                status?: "hidden" | "visible";
+                offset?: number;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReplyPage"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+        };
+    };
+    modDeleteReply: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                replyId: components["parameters"]["ReplyId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ModReason"];
+            };
+        };
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    modHideReply: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                replyId: components["parameters"]["ReplyId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ModReasonRequired"];
+            };
+        };
+        responses: {
+            /** @description The reply after the change */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Reply"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            422: components["responses"]["Error"];
+        };
+    };
+    modUnhideReply: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                replyId: components["parameters"]["ReplyId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The reply after the change */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Reply"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    modSuspendUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                userId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ModReasonRequired"];
+            };
+        };
+        responses: {
+            /** @description Suspended */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            422: components["responses"]["Error"];
+        };
+    };
+    modUnsuspendUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                userId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ModReason"];
+            };
+        };
+        responses: {
+            /** @description Restored */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
         };
     };
 }
