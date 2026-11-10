@@ -1,8 +1,8 @@
 # Shinsou 同步服務
 
-Shinsou X 的開源同步伺服器，任何人都可以自行架設。使用者可以註冊帳號，把書庫、章節狀態、閱讀進度與分類同步到多台裝置；之後也會支援同一伺服器內的作品分享與書籍評論。
+Shinsou X 的開源同步伺服器，任何人都可以自行架設。使用者可以註冊帳號，把書庫、章節狀態、閱讀進度與分類同步到多台裝置，並在同一伺服器內分享作品、撰寫評論。
 
-> 狀態：P3（網頁前台與帳號管理）。帳號、裝置、同步（推送、拉取、即時通知）與背景清理之外，已加入網頁登入（cookie 工作階段）、電子郵件驗證與忘記密碼、唯讀書庫檢視、帳號匯出與刪除、管理後台（使用者、邀請碼、實例設定、稽核紀錄），以及編進執行檔的網頁前台；網頁前台也包含分享、作品頁與評論、版主的檢舉處理頁。
+> 狀態：P6（部署）。帳號、裝置、同步（推送、拉取、即時通知）、背景清理、網頁前台與帳號管理、管理後台、使用者之間的作品分享、作品評論與版主管理都已實作；`deploy/` 提供 Docker Compose 加 Caddy（自動 HTTPS）的部署範本，架設、備份還原與升級說明在 `docs/deploy/`。
 
 ## 設計重點
 
@@ -19,9 +19,10 @@ Shinsou X 的開源同步伺服器，任何人都可以自行架設。使用者�
 | `docs/spec/` | 作品鍵、同步語意、記錄內容、網頁前台與帳號管理（`web.md`）、追蹤、封鎖與分享（`sharing.md`）、作品評論與管理（`reviews.md`）的規格 |
 | `migrations/` | PostgreSQL 資料表遷移 |
 | `cmd/shinsou-server/` | 伺服器進入點（`serve`、`migrate`、`admin`） |
-| `internal/` | 伺服器實作：`config`、`db`、`auth`、`syncsvc`、`notify`、`jobs`、`httpapi`、`instance`、`mail`、`settings`、`library`、`account`、`admin`、`social` |
+| `internal/` | 伺服器實作：`config`、`db`、`auth`、`syncsvc`、`notify`、`jobs`、`httpapi`、`instance`、`mail`、`settings`、`library`、`account`、`admin`、`social`、`reviews`、`markdown` |
 | `web/` | 網頁前台（Vue 3 + Vite + TypeScript）；`npm run build` 輸出到 `web/dist`，由 `web/embed.go` 編進伺服器 |
-| `deploy/` | `docker-compose.yml`（伺服器＋PostgreSQL 16） |
+| `deploy/` | 部署範本：`docker-compose.yml`（伺服器＋PostgreSQL 16＋Caddy 自動 HTTPS）、`Caddyfile`、`.env.example`、`backup.sh` |
+| `docs/deploy/` | 自行架設（`self-hosting.md`）、備份與還原（`backup-restore.md`）、升級（`upgrading.md`） |
 | `docs/postman/` | Postman 測試集合 |
 | `internal/workkey` | 作品鍵參考實作 |
 | `internal/hlc`、`internal/lww` | HLC 與欄位級 LWW 合併的參考實作 |
@@ -111,14 +112,18 @@ go vet ./...
 go test -race ./...
 ```
 
-### 以 Docker Compose 執行
+### 以 Docker Compose 部署
+
+需要一個已指向這台主機的網域，並開放 80 與 443 連接埠；Caddy 會自動申請與續期憑證。
 
 ```bash
 cd deploy
-cp .env.example .env     # 修改 POSTGRES_PASSWORD 與 SHINSOU_PUBLIC_URL
-docker compose up -d
-docker compose logs server | grep setup_code
+cp .env.example .env     # 填入 SHINSOU_DOMAIN 與 POSTGRES_PASSWORD
+docker compose up -d --build
+docker compose logs server | grep setup_code     # 一次性的管理員設定碼
 ```
+
+完整步驟見 [`docs/deploy/self-hosting.md`](docs/deploy/self-hosting.md)；備份與還原見 [`backup-restore.md`](docs/deploy/backup-restore.md)，升級見 [`upgrading.md`](docs/deploy/upgrading.md)。
 
 `docs/postman/shinsou-sync.postman_collection.json` 涵蓋所有端點；登入或註冊後，測試腳本會自動保存權杖。
 
