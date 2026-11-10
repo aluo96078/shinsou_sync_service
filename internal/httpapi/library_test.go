@@ -434,4 +434,15 @@ func TestWorkDescriptorKeepsKnownSourceData(t *testing.T) {
 	if d.Work.Title != "Alpha 2" || d.SourceName == nil || *d.SourceName != "Wenku8" || d.Work.RepositoryURL == nil {
 		t.Fatalf("after a push without source data: %+v", d)
 	}
+
+	// A record the server answers with carries the merged descriptor, not the pushed one.
+	stale := clock(nowMs()-60_000, 0, s.Device.SyncDeviceID)
+	res := push(e, s.AccessToken, 0, []syncsvc.Work{renamed}, recRaw("library", w.Hash, map[string]string{"addedAt": "1"}, stale))
+	if len(res.Results) != 1 || res.Results[0].Record == nil || res.Results[0].Record.Work == nil {
+		t.Fatalf("expected the server's record back: %+v", res.Results)
+	}
+	if got := res.Results[0].Record.Work; got.SourceName == nil || *got.SourceName != "Wenku8" ||
+		got.Language == nil || got.RepositoryURL == nil {
+		t.Fatalf("push result lost the stored source data: %+v", got)
+	}
 }

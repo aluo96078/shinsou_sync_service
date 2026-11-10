@@ -447,11 +447,14 @@ func (s *Service) loadWorks(ctx context.Context, tx pgx.Tx, userID uuid.UUID, ba
 				is distinct from (excluded.title, excluded.author, excluded.cover_url, excluded.content_kind,
 				coalesce(excluded.language, works.language), coalesce(excluded.source_name, works.source_name),
 				coalesce(excluded.repository_url, works.repository_url))
-			returning id`,
+			returning id, language, source_name, repository_url`,
 			w.Hash, w.KeyVersion, w.PackageID, w.SourceID, w.RemoteID, w.Title, w.Author, w.CoverURL,
-			w.ContentKind, w.Language, w.SourceName, w.RepositoryURL, userID).Scan(&id)
+			w.ContentKind, w.Language, w.SourceName, w.RepositoryURL, userID).Scan(&id, &w.Language, &w.SourceName, &w.RepositoryURL)
 		if errors.Is(err, pgx.ErrNoRows) {
-			err = tx.QueryRow(ctx, `select id from works where hash = $1`, h).Scan(&id)
+			// Unchanged. The stored source data still goes back with the records: the pushed
+			// descriptor may have left out what the server already knows.
+			err = tx.QueryRow(ctx, `select id, language, source_name, repository_url from works where hash = $1`, h).
+				Scan(&id, &w.Language, &w.SourceName, &w.RepositoryURL)
 		}
 		if err != nil {
 			return nil, err
