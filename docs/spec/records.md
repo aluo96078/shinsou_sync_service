@@ -108,4 +108,6 @@ App 的 `ReadingLocator` 帶有 `scope`（本機 publication / acquisition / uni
 | `sourceName` | string \| null | 來源顯示名稱 |
 | `repositoryUrl` | string \| null | 提供該來源的儲存庫，分享時用來引導安裝 |
 
-伺服器保留最新一次提交的描述，並記錄提交者。
+伺服器保留最新一次提交的描述，並記錄提交者。例外：`language`、`sourceName`、`repositoryUrl` 描述的是來源而不是作品，提交時為 `null`（裝置沒有安裝該套件）不會清掉伺服器已知的值。
+
+`works` 可以不搭配任何紀錄單獨提交，用來補上先前沒帶到的描述。

@@ -1491,9 +1491,14 @@ export interface components {
             coverUrl?: string | null;
             /** @enum {string} */
             contentKind: "manga" | "novel";
+            /** @description Language of the source. When pushed as null the server keeps the value it already has. */
             language?: string | null;
+            /** @description Display name of the source. When pushed as null the server keeps the value it already has. */
             sourceName?: string | null;
-            /** Format: uri */
+            /**
+             * Format: uri
+             * @description Repository that provides the source. When pushed as null the server keeps the value it already has.
+             */
             repositoryUrl?: string | null;
         };
         PushRecord: {
@@ -1519,6 +1524,7 @@ export interface components {
              * @description The client's pull cursor; checked against the tombstone floor.
              */
             since: number;
+            /** @description Descriptors of the works the records refer to. May be sent without records to update descriptors. */
             works?: components["schemas"]["WorkDescriptor"][];
             records: components["schemas"]["PushRecord"][];
         };

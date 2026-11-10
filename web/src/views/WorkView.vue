@@ -25,6 +25,8 @@ import StarRating from '@/components/StarRating.vue'
 import { errorMessage, formatDecimal, formatNumber, t } from '@/i18n'
 import { MAX_REVIEW_CHARS, canSubmitReview, charCount, lastPageOffset } from '@/lib/reviews'
 import { useAction } from '@/lib/useAction'
+import { packageLabel } from '@/lib/work'
+import { safeHttpUrl } from '@/lib/redirect'
 import { useGate } from '@/lib/useGate'
 import { loginLocation } from '@/router'
 
@@ -230,7 +232,18 @@ const average = computed(() => {
           <div>
             <h1>{{ page.work.title }}</h1>
             <p v-if="page.work.author" class="muted">{{ page.work.author }}</p>
-            <p v-if="page.work.sourceName" class="muted">{{ $t('work.source', { name: page.work.sourceName }) }}</p>
+            <p class="muted">
+              <template v-if="safeHttpUrl(page.work.repositoryUrl)">
+                {{ $t('work.source', { name: safeHttpUrl(page.work.repositoryUrl) ?? '' }) }} ·
+              </template>
+              {{
+                $t('work.package', {
+                  name: page.work.sourceName
+                    ? `${page.work.sourceName} · ${packageLabel(page.work)}`
+                    : packageLabel(page.work),
+                })
+              }}
+            </p>
             <p class="work-rating">
               <template v-if="average !== null">
                 <strong class="work-average">{{ average }}</strong>

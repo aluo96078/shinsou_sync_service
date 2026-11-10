@@ -396,3 +396,42 @@ func TestLibraryToleratesGarbageFields(t *testing.T) {
 		}
 	}
 }
+
+// A descriptor pushed by a device that does not have the package installed carries no source
+// data; it must not erase what another device already told the server. Descriptors can also be
+// pushed on their own, without records.
+func TestWorkDescriptorKeepsKnownSourceData(t *testing.T) {
+	e := newEnv(t)
+	s := e.register("alice")
+	clk := clock(nowMs(), 0, s.Device.SyncDeviceID)
+	w := workWith("1", "Alpha", nil, "novel")
+	push(e, s.AccessToken, 0, []syncsvc.Work{w}, recRaw("library", w.Hash, map[string]string{"addedAt": "1000"}, clk))
+
+	type detail struct {
+		SourceName *string       `json:"sourceName"`
+		Language   *string       `json:"language"`
+		Work       *syncsvc.Work `json:"work"`
+	}
+	get := func() detail {
+		return expect[detail](e, 200, "GET", "/api/v1/library/"+w.Hash, s.AccessToken, nil)
+	}
+	if d := get(); d.SourceName != nil || d.Work == nil || d.Work.PackageID != w.PackageID {
+		t.Fatalf("before: %+v", d)
+	}
+
+	described := w
+	described.SourceName, described.Language, described.RepositoryURL = ptr("Wenku8"), ptr("zh-Hant"), ptr("https://example.org/repo.json")
+	push(e, s.AccessToken, 0, []syncsvc.Work{described})
+	if d := get(); d.SourceName == nil || *d.SourceName != "Wenku8" || d.Language == nil || *d.Language != "zh-Hant" ||
+		d.Work.RepositoryURL == nil || *d.Work.RepositoryURL != "https://example.org/repo.json" {
+		t.Fatalf("after a descriptor-only push: %+v", d)
+	}
+
+	renamed := w
+	renamed.Title = "Alpha 2"
+	push(e, s.AccessToken, 0, []syncsvc.Work{renamed})
+	d := get()
+	if d.Work.Title != "Alpha 2" || d.SourceName == nil || *d.SourceName != "Wenku8" || d.Work.RepositoryURL == nil {
+		t.Fatalf("after a push without source data: %+v", d)
+	}
+}

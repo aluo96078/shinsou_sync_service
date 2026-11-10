@@ -8,6 +8,8 @@ import CoverImage from '@/components/CoverImage.vue'
 import ErrorNote from '@/components/ErrorNote.vue'
 import ShareDialog from '@/components/ShareDialog.vue'
 import UnverifiedNotice from '@/components/UnverifiedNotice.vue'
+import { packageLabel } from '@/lib/work'
+import { safeHttpUrl } from '@/lib/redirect'
 import { reviewsFeature, sharingFeature } from '@/stores/instance'
 import { errorMessage, formatDate, formatDateTime, formatNumber, formatPercent, t } from '@/i18n'
 
@@ -157,9 +159,16 @@ function yesNo(v: boolean): string {
           </div>
 
           <dl class="facts">
-            <template v-if="!detail.local">
+            <template v-if="detail.work">
               <dt>{{ $t('detail.source') }}</dt>
-              <dd>{{ detail.sourceName || '—' }}</dd>
+              <dd :class="{ mono: !!safeHttpUrl(detail.work.repositoryUrl) }" class="share-url">
+                {{ safeHttpUrl(detail.work.repositoryUrl) || '—' }}
+              </dd>
+              <dt>{{ $t('detail.package') }}</dt>
+              <dd>
+                <template v-if="detail.sourceName">{{ detail.sourceName }} · </template>
+                <span class="mono">{{ packageLabel(detail.work) }}</span>
+              </dd>
             </template>
             <dt>{{ $t('detail.language') }}</dt>
             <dd>{{ detail.language || '—' }}</dd>

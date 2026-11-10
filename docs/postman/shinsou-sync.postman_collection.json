@@ -1175,6 +1175,63 @@
           ]
         },
         {
+          "name": "Push work descriptors only",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sync/push",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sync",
+                "push"
+              ],
+              "query": []
+            },
+            "description": "Updates the descriptor of a work without sending records. language, sourceName and repositoryUrl describe the source: when they are null the server keeps the values it already has.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"batchId\": \"{{batchId}}\",\n  \"since\": {{since}},\n  \"works\": [\n    {\n      \"keyVersion\": 1,\n      \"packageId\": \"{{packageId}}\",\n      \"sourceId\": \"{{sourceId}}\",\n      \"remoteId\": \"{{remoteId}}\",\n      \"hash\": \"{{workHash}}\",\n      \"title\": \"Example work\",\n      \"author\": \"Example author\",\n      \"contentKind\": \"novel\",\n      \"language\": \"zh-Hant\",\n      \"sourceName\": \"Example source\",\n      \"repositoryUrl\": \"https://example.org/index.json\"\n    }\n  ],\n  \"records\": []\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Work key v1 (docs/spec/work-key.md): length-prefixed canonical string, SHA-256 hex.",
+                  "const lp = (s) => Buffer.byteLength(s, 'utf8') + ':' + s;",
+                  "const pkg = pm.collectionVariables.get('packageId'), src = pm.collectionVariables.get('sourceId'), rid = pm.collectionVariables.get('remoteId'), unit = pm.collectionVariables.get('unitRemoteId');",
+                  "pm.collectionVariables.set('workHash', CryptoJS.SHA256('w1|' + lp(pkg) + lp(src) + lp(rid)).toString());",
+                  "pm.collectionVariables.set('unitHash', CryptoJS.SHA256('u1|' + lp(pkg) + lp(src) + lp(rid) + lp(unit)).toString());",
+                  "pm.collectionVariables.set('batchId', require('uuid').v4());",
+                  "pm.collectionVariables.set('clock', Date.now() + ':0:' + pm.collectionVariables.get('syncDeviceId'));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('no record results', () => pm.expect(pm.response.json().results).to.have.length(0));"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "Changes",
           "request": {
             "method": "GET",

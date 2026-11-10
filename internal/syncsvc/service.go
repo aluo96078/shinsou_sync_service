@@ -439,11 +439,14 @@ func (s *Service) loadWorks(ctx context.Context, tx pgx.Tx, userID uuid.UUID, ba
 				content_kind, language, source_name, repository_url, updated_by)
 			values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 			on conflict (hash) do update set title = excluded.title, author = excluded.author, cover_url = excluded.cover_url,
-				content_kind = excluded.content_kind, language = excluded.language, source_name = excluded.source_name,
-				repository_url = excluded.repository_url, updated_by = excluded.updated_by, updated_at = now()
+				content_kind = excluded.content_kind, language = coalesce(excluded.language, works.language),
+				source_name = coalesce(excluded.source_name, works.source_name),
+				repository_url = coalesce(excluded.repository_url, works.repository_url),
+				updated_by = excluded.updated_by, updated_at = now()
 			where (works.title, works.author, works.cover_url, works.content_kind, works.language, works.source_name, works.repository_url)
-				is distinct from (excluded.title, excluded.author, excluded.cover_url, excluded.content_kind, excluded.language,
-				excluded.source_name, excluded.repository_url)
+				is distinct from (excluded.title, excluded.author, excluded.cover_url, excluded.content_kind,
+				coalesce(excluded.language, works.language), coalesce(excluded.source_name, works.source_name),
+				coalesce(excluded.repository_url, works.repository_url))
 			returning id`,
 			w.Hash, w.KeyVersion, w.PackageID, w.SourceID, w.RemoteID, w.Title, w.Author, w.CoverURL,
 			w.ContentKind, w.Language, w.SourceName, w.RepositoryURL, userID).Scan(&id)

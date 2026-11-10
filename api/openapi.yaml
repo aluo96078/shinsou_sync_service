@@ -1855,9 +1855,16 @@ components:
         author: { type: [string, 'null'] }
         coverUrl: { type: [string, 'null'], format: uri }
         contentKind: { type: string, enum: [manga, novel] }
-        language: { type: [string, 'null'] }
-        sourceName: { type: [string, 'null'] }
-        repositoryUrl: { type: [string, 'null'], format: uri }
+        language:
+          type: [string, 'null']
+          description: Language of the source. When pushed as null the server keeps the value it already has.
+        sourceName:
+          type: [string, 'null']
+          description: Display name of the source. When pushed as null the server keeps the value it already has.
+        repositoryUrl:
+          type: [string, 'null']
+          format: uri
+          description: Repository that provides the source. When pushed as null the server keeps the value it already has.
 
     PushRecord:
       type: object
@@ -1892,6 +1899,7 @@ components:
         works:
           type: array
           maxItems: 500
+          description: Descriptors of the works the records refer to. May be sent without records to update descriptors.
           items: { $ref: '#/components/schemas/WorkDescriptor' }
         records:
           type: array

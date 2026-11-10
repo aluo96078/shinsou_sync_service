@@ -170,7 +170,7 @@ function statusClass(s: ShareStatus): string {
               </p>
               <blockquote v-if="s.message" class="share-message">{{ s.message }}</blockquote>
               <p class="hint">
-                {{ $t('shares.source', { name: s.work.sourceName || $t('common.unknown') }) }}
+                {{ $t('shares.source', { name: s.work.sourceName || s.work.packageId || $t('common.unknown') }) }}
                 <template v-if="safeHttpUrl(s.work.repositoryUrl)">
                   · {{ $t('shares.repository') }}
                   <span class="mono share-url">{{ safeHttpUrl(s.work.repositoryUrl) }}</span>
