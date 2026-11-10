@@ -822,7 +822,7 @@
               "mode": "raw",
               "raw": "{\n  \"username\": \"{{username}}\",\n  \"password\": \"{{password}}\",\n  \"email\": null,\n  \"inviteCode\": \"{{inviteCode}}\",\n  \"setupCode\": null,\n  \"deviceName\": null\n}"
             },
-            "description": "Same rules as /auth/register with platform web. The refresh token is only set as the HttpOnly cookie shinsou_refresh (Path=/api/v1/web); shinsou_csrf is the readable CSRF cookie. The cookies carry Secure when SHINSOU_PUBLIC_URL is https:// (or the request is TLS), and Postman only sends Secure cookies over https; for a local http server use an http:// SHINSOU_PUBLIC_URL.",
+            "description": "Same rules as /auth/register with platform web. The refresh token is only set as the HttpOnly cookie shinsou_refresh (Path=/api/v1/web); shinsou_csrf is the readable CSRF cookie. shinsou_device (HttpOnly, kept past sign-out) identifies the browser, so signing in again from the same cookie jar reuses its device instead of adding one. The cookies carry Secure when SHINSOU_PUBLIC_URL is https:// (or the request is TLS), and Postman only sends Secure cookies over https; for a local http server use an http:// SHINSOU_PUBLIC_URL.",
             "auth": {
               "type": "noauth"
             }

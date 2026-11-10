@@ -103,6 +103,12 @@ func (s *Service) DeleteAccount(ctx context.Context, p *Principal, password stri
 // LogoutRefreshToken signs out the device that owns the refresh token. An unknown token is not
 // an error: the caller clears its cookies either way.
 func (s *Service) LogoutRefreshToken(ctx context.Context, token string) error {
+	return s.RetireRefreshToken(ctx, token, uuid.Nil)
+}
+
+// RetireRefreshToken signs out the device that owns the refresh token unless it is keep: the
+// session a browser held before it signed in again. An unknown token is not an error.
+func (s *Service) RetireRefreshToken(ctx context.Context, token string, keep uuid.UUID) error {
 	return pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		var deviceID uuid.UUID
 		err := tx.QueryRow(ctx, `select device_id from refresh_tokens where token_hash = $1`, HashRefreshToken(token)).Scan(&deviceID)
@@ -111,6 +117,9 @@ func (s *Service) LogoutRefreshToken(ctx context.Context, token string) error {
 		}
 		if err != nil {
 			return err
+		}
+		if deviceID == keep {
+			return nil
 		}
 		return revokeDevice(ctx, tx, deviceID)
 	})

@@ -2,11 +2,14 @@ package httpapi
 
 import (
 	"crypto/hmac"
+	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/base64"
+	"encoding/hex"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 	"unicode/utf8"
 
@@ -18,6 +21,7 @@ import (
 const (
 	refreshCookie = "shinsou_refresh"
 	csrfCookie    = "shinsou_csrf"
+	deviceCookie  = "shinsou_device"
 	webAPIPath    = "/api/v1/web"
 )
 
@@ -108,14 +112,44 @@ func (s *Server) checkCSRF(r *http.Request, refresh string) *apierr.Error {
 	return nil
 }
 
-func (s *Server) webSessionResponse(w http.ResponseWriter, r *http.Request, status int, sess *auth.Session) {
+// deviceCookieMaxAge is the longest lifetime browsers accept for a cookie (400 days).
+const deviceCookieMaxAge = 400 * 24 * 60 * 60
+
+var deviceCookieRe = regexp.MustCompile(`^[A-Za-z0-9_-]{43}$`)
+
+// browserID returns the value of this browser's device cookie, a new one when it has none.
+func browserID(r *http.Request) string {
+	if c, err := r.Cookie(deviceCookie); err == nil && deviceCookieRe.MatchString(c.Value) {
+		return c.Value
+	}
+	var b [32]byte
+	_, _ = rand.Read(b[:])
+	return base64.RawURLEncoding.EncodeToString(b[:])
+}
+
+// syncDeviceIDFor derives the browser's sync device id from its device cookie.
+func syncDeviceIDFor(browser string) string {
+	sum := sha256.Sum256([]byte(browser))
+	return "web-" + hex.EncodeToString(sum[:6])
+}
+
+// webSessionResponse answers a sign-in. The browser keeps its device cookie past sign-out, so the
+// next sign-in is the same device; the session it held until now, if any, ends.
+func (s *Server) webSessionResponse(w http.ResponseWriter, r *http.Request, status int, sess *auth.Session, browser string) {
+	if c, err := r.Cookie(refreshCookie); err == nil && c.Value != "" {
+		if err := s.auth.RetireRefreshToken(r.Context(), c.Value, sess.Device.ID); err != nil {
+			s.log.Warn("retiring the previous web session", "error", err)
+		}
+	}
+	http.SetCookie(w, &http.Cookie{Name: deviceCookie, Value: browser, Path: webAPIPath, MaxAge: deviceCookieMaxAge,
+		HttpOnly: true, Secure: s.secure(r), SameSite: http.SameSiteLaxMode})
 	s.setSessionCookies(w, r, sess.RefreshToken)
 	writeJSON(w, status, webSession{AccessToken: sess.AccessToken, AccessTokenExpiresAt: sess.AccessTokenExpiresAt,
 		User: sess.User, Device: sess.Device})
 }
 
 // deviceFor builds the device record of a browser session.
-func deviceFor(r *http.Request, name *string) (*auth.DeviceInfo, error) {
+func deviceFor(r *http.Request, name *string, browser string) (*auth.DeviceInfo, error) {
 	n := ""
 	if name != nil {
 		n = strings.TrimSpace(*name)
@@ -125,7 +159,7 @@ func deviceFor(r *http.Request, name *string) (*auth.DeviceInfo, error) {
 	} else if utf8.RuneCountInString(n) > 64 {
 		return nil, apierr.Validation("deviceName must be at most 64 characters")
 	}
-	return &auth.DeviceInfo{Name: n, Platform: "web"}, nil
+	return &auth.DeviceInfo{Name: n, Platform: "web", SyncDeviceID: syncDeviceIDFor(browser)}, nil
 }
 
 func (s *Server) handleWebRegister(w http.ResponseWriter, r *http.Request) {
@@ -145,7 +179,8 @@ func (s *Server) handleWebRegister(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
-	dev, err := deviceFor(r, in.DeviceName)
+	browser := browserID(r)
+	dev, err := deviceFor(r, in.DeviceName, browser)
 	if err != nil {
 		s.fail(w, r, err)
 		return
@@ -156,7 +191,7 @@ func (s *Server) handleWebRegister(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
-	s.webSessionResponse(w, r, http.StatusCreated, sess)
+	s.webSessionResponse(w, r, http.StatusCreated, sess, browser)
 }
 
 func (s *Server) handleWebLogin(w http.ResponseWriter, r *http.Request) {
@@ -173,7 +208,8 @@ func (s *Server) handleWebLogin(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
-	dev, err := deviceFor(r, in.DeviceName)
+	browser := browserID(r)
+	dev, err := deviceFor(r, in.DeviceName, browser)
 	if err != nil {
 		s.fail(w, r, err)
 		return
@@ -183,7 +219,7 @@ func (s *Server) handleWebLogin(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
-	s.webSessionResponse(w, r, http.StatusOK, sess)
+	s.webSessionResponse(w, r, http.StatusOK, sess, browser)
 }
 
 func (s *Server) handleWebRefresh(w http.ResponseWriter, r *http.Request) {

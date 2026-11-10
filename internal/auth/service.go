@@ -36,6 +36,9 @@ type (
 		Name       string `json:"name"`
 		Platform   string `json:"platform"`
 		AppVersion string `json:"appVersion"`
+		// SyncDeviceID is set by the server for a client with a stable identity (a browser's
+		// device cookie): signing in again then reuses that device instead of adding one.
+		SyncDeviceID string `json:"-"`
 	}
 	User struct {
 		ID            uuid.UUID `json:"id"`
@@ -309,6 +312,9 @@ func (s *Service) newSession(ctx context.Context, tx pgx.Tx, user User, info Dev
 }
 
 func (s *Service) createDevice(ctx context.Context, tx pgx.Tx, userID uuid.UUID, info DeviceInfo) (Device, error) {
+	if info.SyncDeviceID != "" {
+		return s.claimDevice(ctx, tx, userID, info)
+	}
 	for range 5 {
 		var rnd [6]byte
 		_, _ = rand.Read(rnd[:])
@@ -334,6 +340,63 @@ func (s *Service) createDevice(ctx context.Context, tx pgx.Tx, userID uuid.UUID,
 		return d, nil
 	}
 	return Device{}, errors.New("could not allocate a sync device id")
+}
+
+// claimDevice gives a client with a stable identity its one device of this account. A device that
+// is still signed in is kept, and its earlier refresh tokens stop working: the client holds a
+// single session. A signed-out one is replaced by a new row, never revived, so access tokens
+// issued before the sign-out stay dead. The row is locked first, so a concurrent sign-out either
+// is seen here or waits and then ends the new session too.
+func (s *Service) claimDevice(ctx context.Context, tx pgx.Tx, userID uuid.UUID, info DeviceInfo) (Device, error) {
+	d := Device{SyncDeviceID: info.SyncDeviceID, Name: info.Name, Platform: info.Platform, Current: true}
+	if info.AppVersion != "" {
+		v := info.AppVersion
+		d.AppVersion = &v
+	}
+	for range 5 {
+		var (
+			id            uuid.UUID
+			revoked       *time.Time
+			created, seen time.Time
+		)
+		err := tx.QueryRow(ctx, `select id, revoked_at from devices where user_id = $1 and sync_device_id = $2 for update`,
+			userID, d.SyncDeviceID).Scan(&id, &revoked)
+		switch {
+		case err == nil && revoked == nil:
+			err = tx.QueryRow(ctx, `update devices set name = $2, platform = $3, app_version = $4, last_seen_at = now()
+				where id = $1 returning created_at, last_seen_at`, id, d.Name, d.Platform, d.AppVersion).Scan(&created, &seen)
+			if err != nil {
+				return Device{}, err
+			}
+			if _, err := tx.Exec(ctx, `delete from refresh_tokens where device_id = $1`, id); err != nil {
+				return Device{}, err
+			}
+		case err == nil || errors.Is(err, pgx.ErrNoRows):
+			if err == nil {
+				if _, err := tx.Exec(ctx, `delete from devices where id = $1`, id); err != nil {
+					return Device{}, err
+				}
+			}
+			id = uuid.New()
+			err = tx.QueryRow(ctx, `insert into devices (id, user_id, sync_device_id, name, platform, app_version)
+				values ($1, $2, $3, $4, $5, $6)
+				on conflict (user_id, sync_device_id) do nothing returning created_at, last_seen_at`,
+				id, userID, d.SyncDeviceID, d.Name, d.Platform, d.AppVersion).Scan(&created, &seen)
+			if errors.Is(err, pgx.ErrNoRows) {
+				continue // another sign-in of this browser created the row meanwhile: claim that one
+			}
+			if err != nil {
+				return Device{}, err
+			}
+		default:
+			return Device{}, err
+		}
+		d.ID = id
+		d.CreatedAt = created.UnixMilli()
+		d.LastSeenAt = seen.UnixMilli()
+		return d, nil
+	}
+	return Device{}, errors.New("could not claim the browser's device")
 }
 
 func (s *Service) issueTokens(ctx context.Context, tx pgx.Tx, userID, deviceID uuid.UUID) (Tokens, error) {
@@ -365,7 +428,18 @@ func (s *Service) Refresh(ctx context.Context, token string) (*Tokens, error) {
 			revoked          *time.Time
 			status           string
 		)
-		err := tx.QueryRow(ctx, `select rt.device_id, d.user_id, rt.expires_at, rt.rotated_at, d.revoked_at, u.status
+		// The device row is locked before the token row, the order sign-in and sign-out use, so a
+		// refresh that meets one of them waits instead of deadlocking.
+		err := tx.QueryRow(ctx, `select d.id from refresh_tokens rt join devices d on d.id = rt.device_id
+			where rt.token_hash = $1 for update of d`, hash).Scan(&deviceID)
+		if errors.Is(err, pgx.ErrNoRows) {
+			failure = apierr.Unauthorized("invalid refresh token")
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		err = tx.QueryRow(ctx, `select rt.device_id, d.user_id, rt.expires_at, rt.rotated_at, d.revoked_at, u.status
 			from refresh_tokens rt join devices d on d.id = rt.device_id join users u on u.id = d.user_id
 			where rt.token_hash = $1 for update of rt`, hash).Scan(&deviceID, &userID, &expires, &rotated, &revoked, &status)
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -593,7 +667,8 @@ func validateDevice(d *DeviceInfo) (DeviceInfo, error) {
 	if d == nil {
 		return DeviceInfo{}, apierr.Validation("device is required")
 	}
-	out := DeviceInfo{Name: strings.TrimSpace(d.Name), Platform: d.Platform, AppVersion: strings.TrimSpace(d.AppVersion)}
+	out := DeviceInfo{Name: strings.TrimSpace(d.Name), Platform: d.Platform, AppVersion: strings.TrimSpace(d.AppVersion),
+		SyncDeviceID: d.SyncDeviceID}
 	if n := utf8.RuneCountInString(out.Name); n < 1 || n > 64 {
 		return DeviceInfo{}, apierr.Validation("device name must be 1-64 characters")
 	}

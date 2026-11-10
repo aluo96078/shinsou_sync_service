@@ -11,12 +11,15 @@ HTTP 介面以 [`api/openapi.yaml`](../../api/openapi.yaml) 為準；本文件�
 | access token | 只存在頁面記憶體，以 `Authorization: Bearer` 送出；不放 cookie、不放 localStorage |
 | `shinsou_refresh` cookie | refresh token。`HttpOnly`、`SameSite=Lax`、`Path=/api/v1/web`、`Max-Age` = refresh token 有效期 |
 | `shinsou_csrf` cookie | CSRF 權杖，頁面可讀。`SameSite=Lax`、`Path=/`、同樣的 `Max-Age` |
+| `shinsou_device` cookie | 這個瀏覽器的裝置識別碼（32 位元組亂數的 base64url）。`HttpOnly`、`SameSite=Lax`、`Path=/api/v1/web`、`Max-Age` 400 天；登出時**不**清除 |
 | `Secure` | `SHINSOU_PUBLIC_URL` 是 `https://` 或該請求本身是 TLS 時加上 |
 
 - `shinsou_csrf` 的值是 `base64url(HMAC-SHA256(csrfKey, refreshToken))`。`csrfKey` 是 32 位元組亂數，首次啟動時產生並存於 `instance_settings`（鍵 `web_csrf_key`）。
 - `POST /web/refresh` 與（帶有 `shinsou_refresh` 時的）`POST /web/logout` 必須帶 `X-CSRF-Token`，伺服器以固定時間比較它與由 cookie 重新計算的值；不符回 `403 csrf_failed`。
 - 四個 `/api/v1/web/*` 端點都檢查 `Origin`：有 `Origin` 標頭，而且它既不等於請求的 `Host`（同協定同主機）也不等於 `SHINSOU_PUBLIC_URL` 的來源時，回 `403 csrf_failed`。沒有 `Origin` 標頭時放行。
 - `/web/register`、`/web/login` 建立的裝置 `platform` 固定為 `web`；`deviceName` 省略時，由 `User-Agent` 推導（例如 `Chrome on macOS`），推導不出來時用 `Web browser`。
+- 同一個瀏覽器只對應一個裝置：`/web/register`、`/web/login` 成功時設定（或延長）`shinsou_device`，裝置的 `syncDeviceId` 由它推導（`web-` 加上 SHA-256 的前 6 個位元組）。同一個帳號再次從這個瀏覽器登入時沿用原本的裝置（更新名稱與最後上線時間），先前發給它的 refresh token 全部失效；裝置若已登出，則以新的裝置 id 取代舊紀錄，登出前發出的 access token 不會復活。清除 cookie 或使用無痕視窗的瀏覽器視為新的裝置。
+- `/web/register`、`/web/login` 的請求若帶著 `shinsou_refresh`，登入成功後該 cookie 所屬的裝置（不是這次登入的裝置時）會被登出：瀏覽器原本的工作階段已被取代。
 - `/web/refresh` 失敗（401）時，回應同時清除兩個 cookie。`/web/logout` 一律清除兩個 cookie。
 - `/web/register`、`/web/login`、`/web/refresh` 與對應的 `/auth/*` 端點共用每個 IP 的限流。
 - refresh token 會輪替，已輪替的權杖再次出現會登出該瀏覽器。前端必須用 Web Locks API（`navigator.locks`，鎖名 `shinsou-refresh`）讓各分頁依序呼叫 `/web/refresh`；瀏覽器不支援時直接呼叫。
