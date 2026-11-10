@@ -67,7 +67,7 @@ docker compose exec server shinsou-server admin reset-setup-code
 
 ## 5. 讓 App 連上來
 
-在 Shinsou X 的「設定 → 同步」輸入伺服器網址 `https://你的網域`，再登入或註冊即可。要給其他人用，在後台「邀請碼」產生一組給對方。
+在 Shinsou X 的「更多 → 同步」輸入伺服器網址 `https://你的網域`，再登入或註冊即可。要給其他人用，在後台「邀請碼」產生一組給對方。
 
 ## 6. 接下來
 
