@@ -86,6 +86,10 @@ func (s *Server) handleStream(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
+	if e := s.verificationGate(p); e != nil {
+		writeAPIError(w, e)
+		return
+	}
 	if strings.Contains(r.Header.Get("Accept"), "text/event-stream") && !strings.EqualFold(r.Header.Get("Upgrade"), "websocket") {
 		s.streamSSE(w, r, p)
 		return

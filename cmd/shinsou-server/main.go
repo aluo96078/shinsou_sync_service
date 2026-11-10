@@ -30,6 +30,7 @@ import (
 	"github.com/aluo96078/shinsou_sync_service/internal/httpapi"
 	"github.com/aluo96078/shinsou_sync_service/internal/instance"
 	"github.com/aluo96078/shinsou_sync_service/internal/jobs"
+	"github.com/aluo96078/shinsou_sync_service/web"
 )
 
 // version is overridden at build time with -ldflags "-X main.version=...".
@@ -127,15 +128,18 @@ func serve(args []string, stderr io.Writer) error {
 	if err := instance.EnsureSetupCode(ctx, pool, log); err != nil {
 		return fmt.Errorf("setup code: %w", err)
 	}
-	srv, err := httpapi.New(ctx, cfg, pool, log, version)
+	srv, err := httpapi.New(ctx, cfg, pool, log, version, httpapi.WithWebFS(web.FS()))
 	if err != nil {
 		return err
 	}
+	defer srv.Close()
 
 	runner := jobs.New(pool, jobs.Options{
 		Interval:           cfg.JobInterval,
 		TombstoneRetention: cfg.TombstoneRetention,
 		BatchRetention:     cfg.BatchRetention,
+		// Expired mail tokens stay for a week before they are purged.
+		EmailTokenRetention: 7 * 24 * time.Hour,
 	}, log)
 	go runner.Run(ctx)
 
@@ -148,7 +152,7 @@ func serve(args []string, stderr io.Writer) error {
 
 	errc := make(chan error, 1)
 	go func() {
-		log.Info("listening", "addr", cfg.Listen, "version", version, "registration", cfg.Registration)
+		log.Info("listening", "addr", cfg.Listen, "version", version, "registration", cfg.Registration, "email", cfg.EmailAvailable())
 		if err := hs.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			errc <- err
 		}

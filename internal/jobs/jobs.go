@@ -16,6 +16,8 @@ type Options struct {
 	Interval           time.Duration
 	TombstoneRetention time.Duration
 	BatchRetention     time.Duration
+	// EmailTokenRetention is how long an expired mail token is kept (7 days in production).
+	EmailTokenRetention time.Duration
 }
 
 // Runner executes the jobs.
@@ -63,6 +65,11 @@ func (r *Runner) RunOnce(ctx context.Context) {
 		r.log.Error("refresh token gc failed", "err", err)
 	} else if n > 0 {
 		r.log.Info("refresh token gc", "removed", n)
+	}
+	if n, err := r.GCEmailTokens(ctx); err != nil {
+		r.log.Error("email token gc failed", "err", err)
+	} else if n > 0 {
+		r.log.Info("email token gc", "removed", n)
 	}
 }
 
@@ -120,5 +127,12 @@ func (r *Runner) GCBatches(ctx context.Context) (int64, error) {
 // GCRefreshTokens removes expired refresh tokens.
 func (r *Runner) GCRefreshTokens(ctx context.Context) (int64, error) {
 	tag, err := r.pool.Exec(ctx, `delete from refresh_tokens where expires_at < now()`)
+	return tag.RowsAffected(), err
+}
+
+// GCEmailTokens removes mail tokens that expired more than the retention period ago.
+func (r *Runner) GCEmailTokens(ctx context.Context) (int64, error) {
+	tag, err := r.pool.Exec(ctx, `delete from email_tokens where expires_at < now() - make_interval(secs => $1)`,
+		seconds(r.opts.EmailTokenRetention))
 	return tag.RowsAffected(), err
 }

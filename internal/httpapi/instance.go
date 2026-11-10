@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/aluo96078/shinsou_sync_service/internal/apierr"
+	"github.com/aluo96078/shinsou_sync_service/internal/instance"
 )
 
 type instanceInfo struct {
@@ -18,9 +19,11 @@ type instanceInfo struct {
 	TermsURL          *string `json:"termsUrl"`
 	PrivacyURL        *string `json:"privacyUrl"`
 	Contact           *string `json:"contact"`
+	SetupPending      bool    `json:"setupPending"`
 	Features          struct {
 		Sharing bool `json:"sharing"`
 		Reviews bool `json:"reviews"`
+		Email   bool `json:"email"`
 	} `json:"features"`
 }
 
@@ -36,18 +39,26 @@ func nilIfEmpty(s string) *string {
 	return &s
 }
 
-func (s *Server) handleInstance(w http.ResponseWriter, _ *http.Request) {
+func (s *Server) handleInstance(w http.ResponseWriter, r *http.Request) {
+	v := s.settings.Get()
 	info := instanceInfo{
-		Name:              s.cfg.InstanceName,
-		Description:       s.cfg.InstanceDescription,
+		Name:              v.Name,
+		Description:       v.Description,
 		Version:           s.version,
 		APIVersions:       apiVers{Min: 1, Max: 1},
-		Registration:      s.cfg.Registration,
-		EmailVerification: s.cfg.EmailVerification,
-		TermsURL:          nilIfEmpty(s.cfg.TermsURL),
-		PrivacyURL:        nilIfEmpty(s.cfg.PrivacyURL),
-		Contact:           nilIfEmpty(s.cfg.Contact),
+		Registration:      v.Registration,
+		EmailVerification: v.EmailVerification,
+		TermsURL:          nilIfEmpty(v.TermsURL),
+		PrivacyURL:        nilIfEmpty(v.PrivacyURL),
+		Contact:           nilIfEmpty(v.Contact),
 	}
+	info.Features.Email = s.mail.Enabled()
+	has, err := instance.HasAdmin(r.Context(), s.pool)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	info.SetupPending = !has
 	writeJSON(w, http.StatusOK, info)
 }
 

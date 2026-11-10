@@ -25,12 +25,15 @@ import (
 )
 
 type env struct {
-	t    *testing.T
-	srv  *httptest.Server
-	pool *pgxpool.Pool
-	cfg  config.Config
-	logs *syncBuf
-	jobs *jobs.Runner
+	t      *testing.T
+	srv    *httptest.Server
+	server *httpapi.Server
+	pool   *pgxpool.Pool
+	cfg    config.Config
+	logs   *syncBuf
+	jobs   *jobs.Runner
+	mailer *fakeMailer
+	admin  string // access token of the lazily created administrator (adminToken)
 }
 
 type syncBuf struct {
@@ -54,6 +57,13 @@ func (s *syncBuf) String() string {
 // unless a test turns them on through mutate.
 func newEnv(t *testing.T, mutate ...func(*config.Config)) *env {
 	t.Helper()
+	return newEnvWith(t, nil, mutate...)
+}
+
+// newEnvWith is newEnv with extra server options. A fake mail sender is always installed; it only
+// receives mail when the configuration enables SMTP (see withMail).
+func newEnvWith(t *testing.T, opts []httpapi.Option, mutate ...func(*config.Config)) *env {
+	t.Helper()
 	d := testutil.NewDB(t)
 	cfg := config.Defaults()
 	cfg.DatabaseURL = d.URL
@@ -66,18 +76,21 @@ func newEnv(t *testing.T, mutate ...func(*config.Config)) *env {
 	}
 	logs := &syncBuf{}
 	log := slog.New(slog.NewJSONHandler(logs, nil))
-	srv, err := httpapi.New(context.Background(), cfg, d.Pool, log, "test")
+	mailer := &fakeMailer{}
+	opts = append([]httpapi.Option{httpapi.WithMailSender(mailer)}, opts...)
+	srv, err := httpapi.New(context.Background(), cfg, d.Pool, log, "test", opts...)
 	if err != nil {
 		t.Fatal(err)
 	}
 	ts := httptest.NewServer(srv.Handler())
+	t.Cleanup(srv.Close)
 	t.Cleanup(ts.Close)
 	t.Cleanup(func() {
 		if t.Failed() {
 			t.Logf("server log:\n%s", logs.String())
 		}
 	})
-	return &env{t: t, srv: ts, pool: d.Pool, cfg: cfg, logs: logs,
+	return &env{t: t, srv: ts, server: srv, mailer: mailer, pool: d.Pool, cfg: cfg, logs: logs,
 		jobs: jobs.New(d.Pool, jobs.Options{TombstoneRetention: 0, BatchRetention: 0}, log)}
 }
 
@@ -259,4 +272,8 @@ func slogTo(w io.Writer) *slog.Logger { return slog.New(slog.NewJSONHandler(w, n
 func newRunner(e *env, retentionSecs int) *jobs.Runner {
 	return jobs.New(e.pool, jobs.Options{TombstoneRetention: time.Duration(retentionSecs) * time.Second,
 		BatchRetention: 24 * time.Hour}, slog.New(slog.NewJSONHandler(io.Discard, nil)))
+}
+
+func newRunnerWithTokenRetention(e *env) *jobs.Runner {
+	return jobs.New(e.pool, jobs.Options{EmailTokenRetention: 7 * 24 * time.Hour}, slog.New(slog.NewJSONHandler(io.Discard, nil)))
 }

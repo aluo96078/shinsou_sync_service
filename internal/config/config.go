@@ -4,7 +4,9 @@ package config
 import (
 	"errors"
 	"fmt"
+	"net/mail"
 	"net/netip"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -17,7 +19,14 @@ const (
 	RegistrationClosed = "closed"
 )
 
-// Email verification policies. Verification itself arrives with SMTP support in a later phase.
+// SMTP transport security modes.
+const (
+	SMTPStartTLS = "starttls"
+	SMTPImplicit = "implicit"
+	SMTPNone     = "none"
+)
+
+// Email verification policies.
 const (
 	EmailDisabled = "disabled"
 	EmailOptional = "optional"
@@ -40,6 +49,14 @@ type Config struct {
 	Contact             string
 
 	TrustedProxies []netip.Prefix
+
+	// SMTP. Mail is sent only when SMTPHost and SMTPFrom are both set (see EmailAvailable).
+	SMTPHost     string
+	SMTPPort     int
+	SMTPUsername string
+	SMTPPassword string
+	SMTPFrom     string
+	SMTPTLS      string
 
 	RecordQuota int
 
@@ -69,6 +86,8 @@ func Defaults() Config {
 		Listen:             "127.0.0.1:8080",
 		Registration:       RegistrationInvite,
 		EmailVerification:  EmailDisabled,
+		SMTPPort:           587,
+		SMTPTLS:            SMTPStartTLS,
 		InstanceName:       "Shinsou Sync",
 		RecordQuota:        200000,
 		AccessTokenTTL:     15 * time.Minute,
@@ -117,11 +136,21 @@ func Load(getenv func(string) string) (Config, error) {
 		}
 	}
 
+	verificationSet := strings.TrimSpace(getenv("SHINSOU_EMAIL_VERIFICATION")) != ""
+
 	str("SHINSOU_DATABASE_URL", &c.DatabaseURL)
 	str("SHINSOU_LISTEN", &c.Listen)
 	str("SHINSOU_PUBLIC_URL", &c.PublicURL)
 	str("SHINSOU_REGISTRATION", &c.Registration)
 	str("SHINSOU_EMAIL_VERIFICATION", &c.EmailVerification)
+	str("SHINSOU_SMTP_HOST", &c.SMTPHost)
+	str("SHINSOU_SMTP_USERNAME", &c.SMTPUsername)
+	if v := getenv("SHINSOU_SMTP_PASSWORD"); v != "" { // passwords may legitimately carry spaces
+		c.SMTPPassword = v
+	}
+	str("SHINSOU_SMTP_FROM", &c.SMTPFrom)
+	str("SHINSOU_SMTP_TLS", &c.SMTPTLS)
+	num("SHINSOU_SMTP_PORT", &c.SMTPPort)
 	str("SHINSOU_INSTANCE_NAME", &c.InstanceName)
 	str("SHINSOU_INSTANCE_DESCRIPTION", &c.InstanceDescription)
 	str("SHINSOU_TERMS_URL", &c.TermsURL)
@@ -163,11 +192,60 @@ func Load(getenv func(string) string) (Config, error) {
 	default:
 		errs = append(errs, fmt.Errorf("SHINSOU_EMAIL_VERIFICATION: want disabled, optional or required, got %q", c.EmailVerification))
 	}
+	c.PublicURL = strings.TrimRight(c.PublicURL, "/")
+	errs = append(errs, c.validateMail(verificationSet)...)
 	if c.Argon2MemoryKiB < 8 || c.Argon2Time < 1 {
 		errs = append(errs, errors.New("argon2 parameters are too small"))
 	}
-	c.PublicURL = strings.TrimRight(c.PublicURL, "/")
 	return c, errors.Join(errs...)
+}
+
+// EmailAvailable reports whether the server can send mail.
+func (c Config) EmailAvailable() bool { return c.SMTPHost != "" && c.SMTPFrom != "" }
+
+// validateMail checks the SMTP settings and settles the default verification policy. It runs
+// after the other values are parsed because the default depends on the registration policy.
+func (c *Config) validateMail(verificationSet bool) []error {
+	var errs []error
+	switch c.SMTPTLS {
+	case SMTPStartTLS, SMTPImplicit, SMTPNone:
+	default:
+		errs = append(errs, fmt.Errorf("SHINSOU_SMTP_TLS: want starttls, implicit or none, got %q", c.SMTPTLS))
+	}
+	if c.SMTPPort < 1 || c.SMTPPort > 65535 {
+		errs = append(errs, fmt.Errorf("SHINSOU_SMTP_PORT: want 1-65535, got %d", c.SMTPPort))
+	}
+	if (c.SMTPUsername == "") != (c.SMTPPassword == "") {
+		errs = append(errs, errors.New("SHINSOU_SMTP_USERNAME and SHINSOU_SMTP_PASSWORD must be set together"))
+	}
+	if c.SMTPHost != "" && c.SMTPFrom == "" {
+		errs = append(errs, errors.New("SHINSOU_SMTP_FROM is required when SHINSOU_SMTP_HOST is set"))
+	}
+	if c.SMTPFrom != "" {
+		if strings.ContainsAny(c.SMTPFrom, "\r\n") {
+			errs = append(errs, errors.New("SHINSOU_SMTP_FROM must not contain line breaks"))
+		} else if _, err := mail.ParseAddress(c.SMTPFrom); err != nil {
+			errs = append(errs, fmt.Errorf("SHINSOU_SMTP_FROM: not a valid address: %v", err))
+		}
+	}
+	if c.EmailAvailable() {
+		u, err := url.Parse(c.PublicURL)
+		if c.PublicURL == "" {
+			errs = append(errs, errors.New("SHINSOU_PUBLIC_URL is required when SMTP is configured (mail links need it)"))
+		} else if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+			errs = append(errs, fmt.Errorf("SHINSOU_PUBLIC_URL: want an absolute http(s) URL, got %q", c.PublicURL))
+		}
+	}
+	if !verificationSet {
+		c.EmailVerification = EmailDisabled
+		if c.EmailAvailable() && c.Registration == RegistrationOpen {
+			c.EmailVerification = EmailRequired
+		}
+	}
+	if c.EmailVerification == EmailRequired && !c.EmailAvailable() {
+		errs = append(errs, errors.New("SHINSOU_EMAIL_VERIFICATION=required needs SMTP (set SHINSOU_SMTP_HOST and SHINSOU_SMTP_FROM)"))
+	}
+	return errs
 }
 
 // RequireDatabase fails when no database URL is configured.

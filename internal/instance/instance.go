@@ -25,7 +25,40 @@ import (
 const (
 	keySigningKey    = "jwt_signing_key"
 	keySetupCodeHash = "setup_code_hash"
+	keyCSRFKey       = "web_csrf_key"
 )
+
+// CSRFKey returns the 32-byte key behind the web CSRF tokens, generating and storing it on first
+// use (first insert wins, like SigningKey).
+func CSRFKey(ctx context.Context, pool *pgxpool.Pool) ([]byte, error) {
+	for range 3 {
+		var raw []byte
+		err := pool.QueryRow(ctx, `select value from instance_settings where key = $1`, keyCSRFKey).Scan(&raw)
+		if err == nil {
+			var s string
+			if err := json.Unmarshal(raw, &s); err != nil {
+				return nil, fmt.Errorf("decode csrf key: %w", err)
+			}
+			b, err := base64.StdEncoding.DecodeString(s)
+			if err != nil || len(b) != 32 {
+				return nil, errors.New("stored csrf key is corrupt")
+			}
+			return b, nil
+		}
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return nil, err
+		}
+		b := make([]byte, 32)
+		if _, err := rand.Read(b); err != nil {
+			return nil, err
+		}
+		val, _ := json.Marshal(base64.StdEncoding.EncodeToString(b))
+		if _, err := pool.Exec(ctx, `insert into instance_settings (key, value) values ($1, $2) on conflict (key) do nothing`, keyCSRFKey, val); err != nil {
+			return nil, err
+		}
+	}
+	return nil, errors.New("could not establish a csrf key")
+}
 
 // SigningKey returns the EdDSA key, generating and storing it on first use. Safe to call from
 // several processes at once: the first insert wins and everyone reads the stored value.

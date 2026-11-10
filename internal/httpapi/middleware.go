@@ -100,13 +100,16 @@ func (s *Server) wrap(next http.Handler) http.Handler {
 		r = r.WithContext(context.WithValue(r.Context(), requestIDKey, id))
 		rw.Header().Set("X-Request-Id", id)
 		rw.Header().Set("X-Content-Type-Options", "nosniff")
-		if strings.HasPrefix(r.URL.Path, "/api/") {
+		if r.URL.Path == "/api" || strings.HasPrefix(r.URL.Path, "/api/") {
 			rw.Header().Set("Cache-Control", "no-store")
 		}
 		w := &statusWriter{ResponseWriter: rw, status: http.StatusOK}
 
 		defer func() {
 			if rec := recover(); rec != nil {
+				if rec == http.ErrAbortHandler {
+					panic(rec) // a handler asked to drop the connection (a failed streamed export)
+				}
 				s.log.Error("panic", slog.Any("panic", rec), slog.String("request_id", id), slog.String("path", r.URL.Path))
 				if !w.wroteHdr {
 					writeAPIError(w, apierr.Internal())

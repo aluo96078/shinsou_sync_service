@@ -4,3 +4,5 @@ data
 *.test
 deploy
 docs
+web/node_modules
+web/dist

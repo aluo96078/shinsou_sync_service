@@ -7,8 +7,13 @@ info:
     name: MIT
     identifier: MIT
   description: |
-    Covers what the P1 server implements: instance discovery, accounts, devices and sync.
-    Sharing and reviews are added in later phases.
+    Instance discovery, accounts, devices and sync, plus what the web front end needs: cookie
+    sessions, a read-only library view, account export and deletion, email verification,
+    password reset and the administration endpoints. Sharing and reviews are added in later
+    phases.
+
+    While the instance requires a verified email address, an account without one (administrators
+    excepted) gets 403 `email_unverified` from the sync and library endpoints.
 
     Merge rules: docs/spec/sync-semantics.md. Work identity: docs/spec/work-key.md.
     Record fields: docs/spec/records.md.
@@ -22,8 +27,12 @@ servers:
 tags:
   - name: instance
   - name: auth
+  - name: account
   - name: devices
   - name: sync
+  - name: web
+  - name: library
+  - name: admin
 
 security:
   - bearer: []
@@ -313,12 +322,523 @@ paths:
               schema: { type: string }
         '401': { $ref: '#/components/responses/Error' }
 
+  /api/v1/auth/email/verify:
+    post:
+      tags: [auth]
+      operationId: verifyEmail
+      security: []
+      description: Confirms an email address with the token from the verification mail.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token: { type: string }
+      responses:
+        '204': { description: Verified. }
+        '400': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/Error' }
+
+  /api/v1/auth/password/forgot:
+    post:
+      tags: [auth]
+      operationId: forgotPassword
+      security: []
+      description: |
+        Sends a password reset mail when the address belongs to an account. The answer is the
+        same whether or not it does. 409 `email_unavailable` when the server has no SMTP.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string, format: email }
+      responses:
+        '204': { description: Accepted. }
+        '409': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/Error' }
+
+  /api/v1/auth/password/reset:
+    post:
+      tags: [auth]
+      operationId: resetPassword
+      security: []
+      description: Sets a new password with the token from the reset mail and signs out every device.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, newPassword]
+              properties:
+                token: { type: string }
+                newPassword: { type: string, minLength: 8, maxLength: 256 }
+      responses:
+        '204': { description: Password changed. }
+        '400': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/Error' }
+
+  /api/v1/me/email:
+    put:
+      tags: [account]
+      operationId: changeEmail
+      description: |
+        Sets, changes or removes (`null`) the email address. A new address starts unverified and,
+        when the server can send mail and verification is not disabled, receives a verification
+        mail. Removing the address is refused with `email_required` when verification is required.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, currentPassword]
+              properties:
+                email: { type: [string, 'null'], format: email }
+                currentPassword: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '401': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/Error' }
+
+  /api/v1/me/email/verification:
+    post:
+      tags: [account]
+      operationId: resendVerification
+      description: Sends the verification mail again. Limited to one mail per minute per account.
+      responses:
+        '204': { description: Sent. }
+        '401': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/Error' }
+
+  /api/v1/me/usage:
+    get:
+      tags: [account]
+      operationId: getUsage
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Usage' }
+        '401': { $ref: '#/components/responses/Error' }
+
+  /api/v1/me/export:
+    get:
+      tags: [account]
+      operationId: exportAccount
+      description: Everything the server stores for the account, as one JSON download.
+      responses:
+        '200':
+          description: OK
+          headers:
+            Content-Disposition:
+              schema: { type: string }
+              description: '`attachment; filename="shinsou-export-<username>-<yyyymmdd>.json"`'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AccountExport' }
+        '401': { $ref: '#/components/responses/Error' }
+
+  /api/v1/me/delete:
+    post:
+      tags: [account]
+      operationId: deleteAccount
+      description: |
+        Permanently deletes the account with its devices and synced records. The only
+        administrator cannot delete itself (`last_admin`).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [currentPassword]
+              properties:
+                currentPassword: { type: string }
+      responses:
+        '204': { description: Deleted. }
+        '401': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+
+  /api/v1/web/register:
+    post:
+      tags: [web]
+      operationId: webRegister
+      security: []
+      description: |
+        Registration for the web front end. Same rules as `/auth/register`; the device is created
+        with platform `web`. The refresh token is not in the body: it is set as the HttpOnly
+        cookie `shinsou_refresh` (SameSite=Lax, Path=/api/v1/web), together with the readable
+        cookie `shinsou_csrf` (Path=/).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WebRegisterRequest' }
+      responses:
+        '201':
+          description: Account created.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WebSession' }
+        '403': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/Error' }
+
+  /api/v1/web/login:
+    post:
+      tags: [web]
+      operationId: webLogin
+      security: []
+      description: Sign-in for the web front end. Sets the same cookies as `/web/register`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WebLoginRequest' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WebSession' }
+        '401': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/Error' }
+
+  /api/v1/web/refresh:
+    post:
+      tags: [web]
+      operationId: webRefresh
+      security: []
+      description: |
+        Exchanges the `shinsou_refresh` cookie for a new access token and rotates both cookies.
+        Requires the header `X-CSRF-Token` with the value of the `shinsou_csrf` cookie, otherwise
+        403 `csrf_failed`. Requests must not run concurrently: a rotated cookie that is presented
+        again signs the browser out (`refresh_token_reused`).
+      parameters:
+        - $ref: '#/components/parameters/CsrfToken'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WebTokens' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+
+  /api/v1/web/logout:
+    post:
+      tags: [web]
+      operationId: webLogout
+      security: []
+      description: |
+        Signs the browser out and clears both cookies. Requires `X-CSRF-Token` when a
+        `shinsou_refresh` cookie is present. Always answers 204 once the CSRF check passes.
+      parameters:
+        - $ref: '#/components/parameters/CsrfToken'
+      responses:
+        '204': { description: Signed out. }
+        '403': { $ref: '#/components/responses/Error' }
+
+  /api/v1/library:
+    get:
+      tags: [library]
+      operationId: listLibrary
+      description: |
+        Read-only view of the synced library for the web front end. 403 `email_unverified` while
+        the server requires a verified email address and the account has none.
+      parameters:
+        - { name: q, in: query, schema: { type: string, maxLength: 200 }, description: Case-insensitive match on title and author. }
+        - { name: category, in: query, schema: { type: string }, description: Category key; `default` selects entries without a category. }
+        - { name: archived, in: query, schema: { type: string, enum: [exclude, include, only], default: exclude } }
+        - { name: sort, in: query, schema: { type: string, enum: [recent, title, added], default: recent } }
+        - { name: offset, in: query, schema: { type: integer, minimum: 0, default: 0 } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LibraryPage' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+
+  /api/v1/library/{key}:
+    get:
+      tags: [library]
+      operationId: getLibraryEntry
+      parameters:
+        - { name: key, in: path, required: true, schema: { type: string }, description: Library record key (`<workHash>` or `local:<uuid>`). }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LibraryDetail' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+
+  /api/v1/categories:
+    get:
+      tags: [library]
+      operationId: listCategories
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [categories]
+                properties:
+                  categories:
+                    type: array
+                    items: { $ref: '#/components/schemas/Category' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+
+  /api/v1/admin/overview:
+    get:
+      tags: [admin]
+      operationId: adminOverview
+      description: Administrators only, like every `/admin` endpoint (403 `forbidden` otherwise).
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminOverview' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+
+  /api/v1/admin/users:
+    get:
+      tags: [admin]
+      operationId: adminListUsers
+      parameters:
+        - { name: q, in: query, schema: { type: string, maxLength: 200 }, description: Matches username or email. }
+        - { name: offset, in: query, schema: { type: integer, minimum: 0, default: 0 } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, total, offset, limit]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/AdminUser' }
+                  total: { type: integer }
+                  offset: { type: integer }
+                  limit: { type: integer }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+
+  /api/v1/admin/users/{userId}:
+    parameters:
+      - { name: userId, in: path, required: true, schema: { type: string, format: uuid } }
+    patch:
+      tags: [admin]
+      operationId: adminUpdateUser
+      description: |
+        Changes role, status, record quota or the verified flag. Suspending signs the user out
+        everywhere. The last active administrator cannot be demoted or suspended (`last_admin`).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdminUserPatch' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminUser' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+    delete:
+      tags: [admin]
+      operationId: adminDeleteUser
+      description: Permanently deletes the account. Refused for the last active administrator.
+      responses:
+        '204': { description: Deleted. }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+
+  /api/v1/admin/users/{userId}/sign-out:
+    parameters:
+      - { name: userId, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [admin]
+      operationId: adminSignOutUser
+      description: Signs the user out on every device.
+      responses:
+        '204': { description: Signed out. }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+
+  /api/v1/admin/invites:
+    get:
+      tags: [admin]
+      operationId: adminListInvites
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [invites]
+                properties:
+                  invites:
+                    type: array
+                    items: { $ref: '#/components/schemas/Invite' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+    post:
+      tags: [admin]
+      operationId: adminCreateInvite
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                maxUses: { type: integer, minimum: 1, maximum: 1000, default: 1 }
+                expiresInHours: { type: [integer, 'null'], minimum: 1, maximum: 8760 }
+                note: { type: [string, 'null'], maxLength: 200 }
+      responses:
+        '201':
+          description: Created. The plain code is only returned here.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [invite, code]
+                properties:
+                  invite: { $ref: '#/components/schemas/Invite' }
+                  code: { type: string }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+
+  /api/v1/admin/invites/{inviteId}:
+    parameters:
+      - { name: inviteId, in: path, required: true, schema: { type: string, format: uuid } }
+    delete:
+      tags: [admin]
+      operationId: adminDeleteInvite
+      responses:
+        '204': { description: Revoked. }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+
+  /api/v1/admin/settings:
+    get:
+      tags: [admin]
+      operationId: adminGetSettings
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminSettings' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+    patch:
+      tags: [admin]
+      operationId: adminUpdateSettings
+      description: |
+        Overrides instance settings at runtime. Environment variables provide the defaults; a
+        value stored here wins until it is reset by sending `null` for that key. Setting
+        `emailVerification` to `required` needs SMTP (`email_unavailable` otherwise).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/InstanceSettingsPatch' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminSettings' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+
+  /api/v1/admin/audit:
+    get:
+      tags: [admin]
+      operationId: adminListAudit
+      description: Administrative actions, newest first.
+      parameters:
+        - { name: offset, in: query, schema: { type: integer, minimum: 0, default: 0 } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, total, offset, limit]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/AuditEntry' }
+                  total: { type: integer }
+                  offset: { type: integer }
+                  limit: { type: integer }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+
 components:
   securitySchemes:
     bearer:
       type: http
       scheme: bearer
       bearerFormat: JWT
+
+  parameters:
+    CsrfToken:
+      name: X-CSRF-Token
+      in: header
+      required: true
+      schema: { type: string }
+      description: Value of the `shinsou_csrf` cookie.
 
   responses:
     Error:
@@ -347,9 +867,16 @@ components:
                 - forbidden
                 - registration_closed
                 - invite_required
+                - email_unverified
+                - email_required
+                - email_unavailable
+                - invalid_token
+                - csrf_failed
+                - last_admin
                 - not_found
                 - username_taken
                 - email_taken
+                - conflict
                 - validation_failed
                 - invalid_work_key
                 - work_hash_mismatch
@@ -380,12 +907,16 @@ components:
         termsUrl: { type: [string, 'null'], format: uri }
         privacyUrl: { type: [string, 'null'], format: uri }
         contact: { type: [string, 'null'] }
+        setupPending:
+          type: boolean
+          description: True while the instance has no administrator; registering with the setup code creates one.
         features:
           type: object
           required: [sharing, reviews]
           properties:
             sharing: { type: boolean }
             reviews: { type: boolean }
+            email: { type: boolean, description: True when the server can send mail (verification, password reset). }
 
     DeviceInfo:
       type: object
@@ -597,3 +1128,259 @@ components:
           items: { $ref: '#/components/schemas/SyncRecord' }
         nextSince: { type: integer, format: int64 }
         hasMore: { type: boolean }
+
+    WebRegisterRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username: { type: string, pattern: '^[a-z0-9_]{3,32}$' }
+        password: { type: string, minLength: 8, maxLength: 256 }
+        email: { type: [string, 'null'], format: email }
+        inviteCode: { type: [string, 'null'] }
+        setupCode: { type: [string, 'null'] }
+        deviceName:
+          type: [string, 'null']
+          maxLength: 64
+          description: Shown in the device list. Defaults to a name derived from the User-Agent.
+
+    WebLoginRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username: { type: string }
+        password: { type: string }
+        deviceName: { type: [string, 'null'], maxLength: 64 }
+
+    WebTokens:
+      type: object
+      required: [accessToken, accessTokenExpiresAt]
+      properties:
+        accessToken: { type: string, description: Send as a bearer token; keep it in memory only. }
+        accessTokenExpiresAt: { type: integer, format: int64, description: Unix milliseconds. }
+
+    WebSession:
+      allOf:
+        - $ref: '#/components/schemas/WebTokens'
+        - type: object
+          required: [user, device]
+          properties:
+            user: { $ref: '#/components/schemas/User' }
+            device: { $ref: '#/components/schemas/Device' }
+
+    Usage:
+      type: object
+      required: [total, quota, byKind]
+      properties:
+        total: { type: integer, description: Number of stored records, tombstones included. }
+        quota: { type: [integer, 'null'], description: Record limit for this account; null means unlimited. }
+        byKind:
+          type: object
+          description: Live (not deleted) records per kind.
+          additionalProperties: { type: integer }
+
+    AccountExport:
+      type: object
+      required: [exportedAt, user, devices, works, records]
+      properties:
+        exportedAt: { type: integer, format: int64 }
+        instance:
+          type: object
+          properties:
+            name: { type: string }
+            url: { type: [string, 'null'] }
+        user: { $ref: '#/components/schemas/User' }
+        devices:
+          type: array
+          items: { $ref: '#/components/schemas/Device' }
+        works:
+          type: array
+          description: Descriptions of the works the records refer to.
+          items: { $ref: '#/components/schemas/WorkDescriptor' }
+        records:
+          type: array
+          items:
+            allOf:
+              - $ref: '#/components/schemas/SyncRecord'
+              - type: object
+                properties:
+                  updatedAt: { type: integer, format: int64 }
+
+    LibraryItem:
+      type: object
+      required: [key, title, local, categoryIds, pinned, archived, trackedUnits, readUnits, updatedAt]
+      properties:
+        key: { type: string }
+        title:
+          type: string
+          description: The custom title, else the work title, else the title stored with a local entry.
+        author: { type: [string, 'null'] }
+        contentKind: { type: [string, 'null'], enum: [manga, novel, null] }
+        coverUrl: { type: [string, 'null'] }
+        sourceName: { type: [string, 'null'] }
+        language: { type: [string, 'null'] }
+        local: { type: boolean, description: True for `local:` entries, which have no source. }
+        addedAt: { type: [integer, 'null'], format: int64 }
+        categoryIds:
+          type: array
+          items: { type: string }
+        pinned: { type: boolean }
+        archived: { type: boolean }
+        trackedUnits: { type: integer, description: Chapters that have a synced state record. }
+        readUnits: { type: integer }
+        progression: { type: [number, 'null'], description: Reading position in the whole work, 0 to 1. }
+        currentUnitRemoteId: { type: [string, 'null'] }
+        lastReadAt: { type: [integer, 'null'], format: int64 }
+        updatedAt: { type: integer, format: int64, description: When the library record last changed on the server. }
+
+    LibraryPage:
+      type: object
+      required: [items, total, offset, limit]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/LibraryItem' }
+        total: { type: integer }
+        offset: { type: integer }
+        limit: { type: integer }
+
+    LibraryUnit:
+      type: object
+      required: [unitRemoteId, read, bookmarked, updatedAt]
+      properties:
+        unitRemoteId: { type: string }
+        read: { type: boolean }
+        bookmarked: { type: boolean }
+        lastPageIndex: { type: [integer, 'null'] }
+        updatedAt: { type: integer, format: int64 }
+
+    LibraryDetail:
+      allOf:
+        - $ref: '#/components/schemas/LibraryItem'
+        - type: object
+          required: [units]
+          properties:
+            work:
+              oneOf:
+                - $ref: '#/components/schemas/WorkDescriptor'
+                - type: 'null'
+            units:
+              type: array
+              description: Chapter states, most recently changed first (at most 5000).
+              items: { $ref: '#/components/schemas/LibraryUnit' }
+
+    Category:
+      type: object
+      required: [key, name, order]
+      properties:
+        key: { type: string }
+        name: { type: string }
+        order: { type: integer }
+
+    AdminOverview:
+      type: object
+      required: [version, users, devices, records, works, emailAvailable]
+      properties:
+        version: { type: string }
+        users:
+          type: object
+          required: [total, active, suspended, admins]
+          properties:
+            total: { type: integer }
+            active: { type: integer }
+            suspended: { type: integer }
+            admins: { type: integer }
+        devices: { type: integer, description: Devices that are signed in. }
+        records: { type: integer }
+        works: { type: integer }
+        emailAvailable: { type: boolean, description: True when SMTP is configured. }
+
+    AdminUser:
+      type: object
+      required: [id, username, emailVerified, role, status, createdAt, deviceCount, recordCount]
+      properties:
+        id: { type: string, format: uuid }
+        username: { type: string }
+        email: { type: [string, 'null'] }
+        emailVerified: { type: boolean }
+        role: { type: string, enum: [user, moderator, admin] }
+        status: { type: string, enum: [active, suspended] }
+        createdAt: { type: integer, format: int64 }
+        lastSeenAt: { type: [integer, 'null'], format: int64 }
+        deviceCount: { type: integer }
+        recordCount: { type: integer }
+        recordQuota: { type: [integer, 'null'], description: Per-user override; null uses the instance default. }
+
+    AdminUserPatch:
+      type: object
+      minProperties: 1
+      properties:
+        role: { type: string, enum: [user, moderator, admin] }
+        status: { type: string, enum: [active, suspended] }
+        recordQuota: { type: [integer, 'null'], minimum: 0 }
+        emailVerified: { type: boolean }
+
+    Invite:
+      type: object
+      required: [id, maxUses, uses, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        maxUses: { type: integer }
+        uses: { type: integer }
+        expiresAt: { type: [integer, 'null'], format: int64 }
+        createdAt: { type: integer, format: int64 }
+        createdBy: { type: [string, 'null'], description: Username; null for invites made on the command line. }
+        note: { type: [string, 'null'] }
+
+    InstanceSettings:
+      type: object
+      required: [name, description, registration, emailVerification, termsUrl, privacyUrl, contact]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 80 }
+        description: { type: string, maxLength: 500 }
+        registration: { type: string, enum: [open, invite, closed] }
+        emailVerification: { type: string, enum: [disabled, optional, required] }
+        termsUrl: { type: [string, 'null'], format: uri }
+        privacyUrl: { type: [string, 'null'], format: uri }
+        contact: { type: [string, 'null'], maxLength: 200 }
+
+    InstanceSettingsPatch:
+      type: object
+      description: Only the keys that are present change. `null` resets a key to its environment default.
+      minProperties: 1
+      properties:
+        name: { type: [string, 'null'] }
+        description: { type: [string, 'null'] }
+        registration: { type: [string, 'null'], enum: [open, invite, closed, null] }
+        emailVerification: { type: [string, 'null'], enum: [disabled, optional, required, null] }
+        termsUrl: { type: [string, 'null'] }
+        privacyUrl: { type: [string, 'null'] }
+        contact: { type: [string, 'null'] }
+
+    AdminSettings:
+      type: object
+      required: [values, defaults, overridden, emailAvailable]
+      properties:
+        values: { $ref: '#/components/schemas/InstanceSettings' }
+        defaults: { $ref: '#/components/schemas/InstanceSettings' }
+        overridden:
+          type: array
+          description: Keys whose value comes from the database instead of the environment.
+          items: { type: string }
+        emailAvailable: { type: boolean }
+
+    AuditEntry:
+      type: object
+      required: [id, action, createdAt]
+      properties:
+        id: { type: integer, format: int64 }
+        actor:
+          type: [object, 'null']
+          required: [id, username]
+          properties:
+            id: { type: string, format: uuid }
+            username: { type: string }
+        action: { type: string }
+        targetType: { type: [string, 'null'] }
+        targetId: { type: [string, 'null'] }
+        detail: { type: [object, 'null'] }
+        createdAt: { type: integer, format: int64 }

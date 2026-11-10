@@ -7,7 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"net/http"
-	"net/mail"
+	netmail "net/mail"
 	"net/url"
 	"regexp"
 	"strings"
@@ -22,6 +22,8 @@ import (
 	"github.com/aluo96078/shinsou_sync_service/internal/apierr"
 	"github.com/aluo96078/shinsou_sync_service/internal/config"
 	"github.com/aluo96078/shinsou_sync_service/internal/instance"
+	"github.com/aluo96078/shinsou_sync_service/internal/mail"
+	"github.com/aluo96078/shinsou_sync_service/internal/settings"
 )
 
 var usernameRe = regexp.MustCompile(`^[a-z0-9_]{3,32}$`)
@@ -86,6 +88,8 @@ type Principal struct {
 	SyncDeviceID string
 	Role         string
 	Expires      time.Time
+	// EmailVerified is the account's current flag (read on every request).
+	EmailVerified bool
 }
 
 // Service is the account service.
@@ -96,9 +100,18 @@ type Service struct {
 	tokens *Issuer
 	now    func() time.Time
 	host   string
+	live   *settings.Store
+	mailer Mailer
 }
 
-// NewService creates the service.
+// Mailer queues outgoing mail. Enqueue never blocks on the network.
+type Mailer interface {
+	Enabled() bool
+	Enqueue(m mail.Message) bool
+}
+
+// NewService creates the service. Registration and verification policy come from cfg until
+// WithRuntime hands over the live settings.
 func NewService(pool *pgxpool.Pool, cfg config.Config, hasher *Hasher, tokens *Issuer) *Service {
 	s := &Service{pool: pool, cfg: cfg, hasher: hasher, tokens: tokens, now: time.Now}
 	if u, err := url.Parse(cfg.PublicURL); err == nil {
@@ -106,6 +119,32 @@ func NewService(pool *pgxpool.Pool, cfg config.Config, hasher *Hasher, tokens *I
 	}
 	return s
 }
+
+// WithRuntime attaches the live instance settings and the outgoing mail queue.
+func (s *Service) WithRuntime(live *settings.Store, mailer Mailer) *Service {
+	s.live, s.mailer = live, mailer
+	return s
+}
+
+// policy returns the effective registration and verification policy and the instance name.
+func (s *Service) policy() (registration, verification, name string) {
+	if s.live != nil {
+		v := s.live.Get()
+		return v.Registration, v.EmailVerification, v.Name
+	}
+	return s.cfg.Registration, s.cfg.EmailVerification, s.cfg.InstanceName
+}
+
+func (s *Service) mailEnabled() bool { return s.mailer != nil && s.mailer.Enabled() }
+
+// RequiresVerification reports whether the instance currently demands a verified address.
+func (s *Service) RequiresVerification() bool {
+	_, v, _ := s.policy()
+	return v == config.EmailRequired
+}
+
+// EmailAvailable reports whether mail can be sent.
+func (s *Service) EmailAvailable() bool { return s.mailEnabled() }
 
 // Register creates an account and signs this device in.
 func (s *Service) Register(ctx context.Context, in RegisterInput) (*Session, error) {
@@ -126,8 +165,9 @@ func (s *Service) Register(ctx context.Context, in RegisterInput) (*Session, err
 	}
 	setup := deref(in.SetupCode) != ""
 	invite := deref(in.InviteCode)
+	registration, verification, instanceName := s.policy()
 	if !setup {
-		switch s.cfg.Registration {
+		switch registration {
 		case config.RegistrationClosed:
 			return nil, apierr.New(http.StatusForbidden, "registration_closed", "registration is closed on this server")
 		case config.RegistrationInvite:
@@ -136,13 +176,19 @@ func (s *Service) Register(ctx context.Context, in RegisterInput) (*Session, err
 			}
 		}
 	}
+	if verification == config.EmailRequired && email == nil {
+		return nil, apierr.New(http.StatusUnprocessableEntity, "email_required", "an email address is required to register on this server")
+	}
 
 	hash, err := s.hasher.Hash(in.Password)
 	if err != nil {
 		return nil, err
 	}
 
-	var session *Session
+	var (
+		session   *Session
+		mailToken string
+	)
 	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		role := "user"
 		switch {
@@ -155,7 +201,7 @@ func (s *Service) Register(ctx context.Context, in RegisterInput) (*Session, err
 				return apierr.Forbidden("invalid setup code")
 			}
 			role = "admin"
-		case s.cfg.Registration == config.RegistrationInvite:
+		case registration == config.RegistrationInvite:
 			ok, err := instance.ConsumeInvite(ctx, tx, invite)
 			if err != nil {
 				return err
@@ -187,11 +233,19 @@ func (s *Service) Register(ctx context.Context, in RegisterInput) (*Session, err
 				return err
 			}
 		}
+		if email != nil && verification != config.EmailDisabled && s.mailEnabled() {
+			if mailToken, err = insertMailToken(ctx, tx, user.ID, purposeVerify, *email, verifyTTL); err != nil {
+				return err
+			}
+		}
 		session, err = s.newSession(ctx, tx, user, dev)
 		return err
 	})
 	if err != nil {
 		return nil, err
+	}
+	if mailToken != "" {
+		s.mailer.Enqueue(mail.VerifyEmail(instanceName, s.cfg.PublicURL, *email, mailToken))
 	}
 	return session, nil
 }
@@ -378,9 +432,9 @@ func (s *Service) Authenticate(ctx context.Context, token string) (*Principal, e
 		revoked  *time.Time
 		lastSeen time.Time
 	)
-	err = s.pool.QueryRow(ctx, `select u.role, u.status, d.sync_device_id, d.revoked_at, d.last_seen_at
+	err = s.pool.QueryRow(ctx, `select u.role, u.status, u.email_verified, d.sync_device_id, d.revoked_at, d.last_seen_at
 		from devices d join users u on u.id = d.user_id where d.id = $1 and d.user_id = $2`, deviceID, userID).
-		Scan(&p.Role, &status, &p.SyncDeviceID, &revoked, &lastSeen)
+		Scan(&p.Role, &status, &p.EmailVerified, &p.SyncDeviceID, &revoked, &lastSeen)
 	if errors.Is(err, pgx.ErrNoRows) || (err == nil && (revoked != nil || status != "active")) {
 		return nil, apierr.Unauthorized("this device has been signed out")
 	}
@@ -528,7 +582,7 @@ func normalizeEmail(e *string) (*string, error) {
 	if v == "" {
 		return nil, nil
 	}
-	addr, err := mail.ParseAddress(v)
+	addr, err := netmail.ParseAddress(v)
 	if err != nil || addr.Address != v || len(v) > 254 {
 		return nil, apierr.Validation("email address is not valid")
 	}
