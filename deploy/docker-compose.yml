@@ -1,6 +1,7 @@
-# Shinsou sync server + PostgreSQL + Caddy (automatic HTTPS).
+# Shinsou sync server + PostgreSQL. The server speaks plain HTTP on 127.0.0.1:8080; HTTPS and
+# certificates are yours to provide with the reverse proxy you already run (nginx, Caddy, ...).
 #
-#   cp .env.example .env     # set SHINSOU_DOMAIN and POSTGRES_PASSWORD
+#   cp .env.example .env     # set SHINSOU_PUBLIC_URL and POSTGRES_PASSWORD
 #   docker compose up -d --build
 #   docker compose logs server | grep setup_code    # one-time administrator setup code
 #
@@ -35,9 +36,10 @@ services:
     environment:
       SHINSOU_DATABASE_URL: postgres://shinsou:${POSTGRES_PASSWORD}@db:5432/shinsou?sslmode=disable
       SHINSOU_LISTEN: 0.0.0.0:8080
-      SHINSOU_PUBLIC_URL: https://${SHINSOU_DOMAIN:?set SHINSOU_DOMAIN in .env}
-      # Caddy is the only thing that reaches the server; trust its X-Forwarded-For.
-      SHINSOU_TRUSTED_PROXIES: 172.30.42.0/24
+      SHINSOU_PUBLIC_URL: ${SHINSOU_PUBLIC_URL:?set SHINSOU_PUBLIC_URL in .env}
+      # A reverse proxy on this host reaches the server through the network's gateway; trust its
+      # X-Forwarded-For. Change it when your proxy connects from somewhere else.
+      SHINSOU_TRUSTED_PROXIES: ${SHINSOU_TRUSTED_PROXIES:-172.30.42.1/32}
       SHINSOU_REGISTRATION: ${SHINSOU_REGISTRATION:-invite}
       SHINSOU_EMAIL_VERIFICATION: ${SHINSOU_EMAIL_VERIFICATION:-}
       SHINSOU_INSTANCE_NAME: ${SHINSOU_INSTANCE_NAME:-Shinsou Sync}
@@ -57,22 +59,8 @@ services:
       SHINSOU_SMTP_PASSWORD: ${SHINSOU_SMTP_PASSWORD:-}
       SHINSOU_SMTP_FROM: ${SHINSOU_SMTP_FROM:-}
       SHINSOU_SMTP_TLS: ${SHINSOU_SMTP_TLS:-starttls}
-    networks: [shinsou]
-
-  caddy:
-    image: caddy:2
-    restart: unless-stopped
-    depends_on: [server]
-    environment:
-      SHINSOU_DOMAIN: ${SHINSOU_DOMAIN}
     ports:
-      - "${SHINSOU_HTTP_PORT:-80}:80"
-      - "${SHINSOU_HTTPS_PORT:-443}:443"
-      - "${SHINSOU_HTTPS_PORT:-443}:443/udp"
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy-data:/data
-      - caddy-config:/config
+      - "${SHINSOU_BIND:-127.0.0.1}:${SHINSOU_PORT:-8080}:8080"
     networks: [shinsou]
 
 networks:
@@ -83,5 +71,3 @@ networks:
 
 volumes:
   db-data:
-  caddy-data:
-  caddy-config:

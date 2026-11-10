@@ -1,7 +1,0 @@
-# Caddy obtains and renews the certificate for SHINSOU_DOMAIN by itself (Let's Encrypt).
-# Ports 80 and 443 must be reachable from the internet and the domain must point at this host.
-# With SHINSOU_DOMAIN=localhost Caddy uses its own local certificate instead, for a trial run.
-{$SHINSOU_DOMAIN} {
-	encode zstd gzip
-	reverse_proxy server:8080
-}

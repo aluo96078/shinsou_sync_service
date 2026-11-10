@@ -2,7 +2,7 @@
 
 伺服器的所有狀態都在 PostgreSQL 裡：帳號、裝置、同步記錄、分享、評論、實例設定與稽核紀錄。**備份資料庫就是備份全部。** 伺服器本身不寫入任何檔案。
 
-另外請把 `deploy/.env` 另存一份（裡面有資料庫密碼與寄信設定）。Caddy 的憑證不需要備份，遺失時會自動重新申請。
+另外請把 `deploy/.env` 另存一份（裡面有資料庫密碼與寄信設定）。HTTPS 憑證在你自己的反向代理那邊，不在這裡。
 
 以下指令都在 `deploy/` 目錄執行。
 
@@ -47,7 +47,7 @@ docker compose exec -T db pg_dump -U shinsou -d shinsou -Fc > shinsou.dump
 1. 停掉伺服器（資料庫繼續執行）：
 
 ```bash
-docker compose stop server caddy
+docker compose stop server
 ```
 
 2. 把傾印檔灌回去：
@@ -83,7 +83,7 @@ docker compose up -d
 
 ## 驗證備份
 
-沒有還原過的備份不能算數。偶爾在另一台機器（或本機，`SHINSOU_DOMAIN=localhost`）照「搬到另一台主機」做一次，確認登入得進去、書庫看得到。
+沒有還原過的備份不能算數。偶爾在另一台機器（或本機，`SHINSOU_PUBLIC_URL=http://localhost:8080`）照「搬到另一台主機」做一次，確認登入得進去、書庫看得到。
 
 快速檢查傾印檔是否完整（列出內容，不寫入任何東西）：
 

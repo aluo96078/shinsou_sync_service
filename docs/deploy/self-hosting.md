@@ -1,14 +1,14 @@
 # 架設指南
 
-這份文件帶你用 Docker Compose 架好一台 Shinsou 同步伺服器：伺服器本體、PostgreSQL 16，以及自動申請 HTTPS 憑證的 Caddy。照著做大約 15 分鐘。
+這份文件帶你用 Docker Compose 架好一台 Shinsou 同步伺服器：伺服器本體與 PostgreSQL 16。伺服器只在主機的 `127.0.0.1:8080` 提供 HTTP；**網域、HTTPS 與憑證由你自己的反向代理處理**（nginx、Caddy、Traefik 都可以），這個範本不會申請憑證，也不會占用 80 / 443 埠。
 
 ## 你需要準備
 
-- 一台有固定對外 IP 的 Linux 主機（1 vCPU、1 GB 記憶體即可起步），對外開放 **80** 與 **443** 埠；
-- 一個網域（例如 `sync.example.com`），DNS 的 A / AAAA 記錄已經指到這台主機；
+- 一台 Linux 主機（1 vCPU、1 GB 記憶體即可起步）；
+- 一個網域（例如 `sync.example.com`），以及能替它提供 HTTPS 的反向代理；
 - 主機上裝好 [Docker Engine](https://docs.docker.com/engine/install/) 與 Compose 外掛（`docker compose version` 有輸出），以及 `git`。
 
-只是想在自己的電腦上試用？把下面的網域換成 `localhost` 即可，見[本機試用](#本機試用)。
+只是想在自己的電腦上試用？不需要網域與代理，見[本機試用](#本機試用)。
 
 ## 1. 取得程式
 
@@ -30,7 +30,7 @@ cp .env.example .env
 
 | 變數 | 填什麼 |
 |---|---|
-| `SHINSOU_DOMAIN` | 你的網域，不含 `https://`，例如 `sync.example.com` |
+| `SHINSOU_PUBLIC_URL` | 使用者在瀏覽器看到的完整網址，例如 `https://sync.example.com` |
 | `POSTGRES_PASSWORD` | 資料庫密碼。用 `openssl rand -hex 24` 產生一個，貼進去 |
 
 其他項目先照預設即可，之後大多能在網頁後台調整。預設的註冊方式是**邀請制**（`SHINSOU_REGISTRATION=invite`）：只有拿到邀請碼的人能註冊。想讓任何人註冊就改成 `open`。
@@ -41,13 +41,56 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
-第一次會建置映像，需要幾分鐘。完成後確認三個服務都在執行：
+第一次會建置映像，需要幾分鐘。完成後確認兩個服務都在執行：
 
 ```bash
 docker compose ps
 ```
 
-Caddy 會自動向 Let's Encrypt 申請憑證，通常一分鐘內完成。用瀏覽器打開 `https://你的網域`，應該看到登入頁。
+在主機上確認伺服器有回應（應回傳一段 JSON）：
+
+```bash
+curl http://127.0.0.1:8080/.well-known/shinsou
+```
+
+## 3.1 設定反向代理
+
+讓你的代理把網域轉到 `http://127.0.0.1:8080`，並且：
+
+- 轉送原本的 `Host` 標頭；
+- 帶上 `X-Forwarded-For`；
+- 支援 WebSocket（`/api/v1/sync/stream` 用來即時通知其他裝置）。
+
+nginx 的範例（憑證設定照你原本的做法）：
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name sync.example.com;
+    # ssl_certificate / ssl_certificate_key ...
+
+    location / {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_read_timeout 1h;
+    }
+}
+```
+
+Caddy 的範例（Caddy 會自己處理憑證）：
+
+```
+sync.example.com {
+    reverse_proxy 127.0.0.1:8080
+}
+```
+
+完成後用瀏覽器打開 `https://你的網域`，應該看到登入頁。
 
 ## 4. 建立管理員帳號
 
@@ -97,30 +140,39 @@ docker compose exec server shinsou-server admin reset-setup-code
 
 ## 本機試用
 
-把 `.env` 的 `SHINSOU_DOMAIN` 設為 `localhost`，其他步驟相同。Caddy 會改用自己簽發的本機憑證，瀏覽器第一次會警告憑證不受信任，這在試用時是正常的。打開 `https://localhost`。
+把 `.env` 的 `SHINSOU_PUBLIC_URL` 設為 `http://localhost:8080`，其他步驟相同，不需要反向代理。啟動後打開 `http://localhost:8080`。
 
-本機的 80 / 443 埠被占用時，在 `.env` 設定 `SHINSOU_HTTP_PORT` 與 `SHINSOU_HTTPS_PORT`（例如 8080 與 8443），然後打開 `https://localhost:8443`。這只適合試用：自動申請正式憑證需要標準的 80 與 443 埠，而且信件連結不會包含自訂的埠號。
+8080 埠被占用時，在 `.env` 設定 `SHINSOU_PORT`（例如 `11080`），`SHINSOU_PUBLIC_URL` 也要跟著改成 `http://localhost:11080`。
 
-## 已經有自己的反向代理
+## 連接埠與代理的位置
 
-如果主機上已經有 nginx、Traefik 或另一個 Caddy 在處理 HTTPS：
+| 變數 | 預設 | 說明 |
+|---|---|---|
+| `SHINSOU_PORT` | `8080` | 伺服器在主機上的埠（HTTP） |
+| `SHINSOU_BIND` | `127.0.0.1` | 綁定的位址。代理在同一台主機時維持預設；代理在另一台機器時才改成 `0.0.0.0`，並用防火牆限制只有代理連得到 |
+| `SHINSOU_TRUSTED_PROXIES` | `172.30.42.1/32` | 哪些來源的 `X-Forwarded-For` 可以相信（以逗號分隔的 CIDR）。預設是 Compose 網路的閘道，也就是主機上的代理連進容器時的來源位址 |
 
-1. 從 `docker-compose.yml` 刪掉 `caddy` 服務與 `caddy-data`、`caddy-config` 兩個 volume；
-2. 在 `server` 服務加上 `ports: ["127.0.0.1:8080:8080"]`；
-3. 讓你的代理把網域轉到 `127.0.0.1:8080`，並且：
-   - 轉送原本的 `Host` 標頭；
-   - 支援 WebSocket（`/api/v1/sync/stream` 用來即時通知其他裝置）；
-   - 帶上 `X-Forwarded-For`；
-4. 把 `SHINSOU_TRUSTED_PROXIES` 改成代理連到容器時的來源位址（代理在主機上時，通常是 Compose 網路的閘道 `172.30.42.1`）。這個值不對的話，所有人會被當成同一個 IP，登入的速率限制會互相影響。
+`SHINSOU_TRUSTED_PROXIES` 不對的話，所有人會被當成同一個 IP，登入的速率限制會互相影響。
 
-`SHINSOU_PUBLIC_URL`（由 `SHINSOU_DOMAIN` 組成）必須與使用者在瀏覽器看到的網址一致，否則網頁登入會回 `403 csrf_failed`。
+`SHINSOU_PUBLIC_URL` 必須與使用者在瀏覽器看到的網址一致（包含 `https://` 與埠號），否則網頁登入會回 `403 csrf_failed`。
+
+## 從內建 Caddy 的舊範本升級
+
+舊版範本內建 Caddy 並自動申請憑證。更新程式後：
+
+1. 在 `.env` 把 `SHINSOU_DOMAIN=sync.example.com` 換成 `SHINSOU_PUBLIC_URL=https://sync.example.com`，並移除 `SHINSOU_HTTP_PORT`、`SHINSOU_HTTPS_PORT`；
+2. 執行 `docker compose up -d --build --remove-orphans`（會移除舊的 Caddy 容器）；
+3. 把你的反向代理指到 `http://127.0.0.1:8080`（或你設定的 `SHINSOU_PORT`）。
+
+舊的憑證 volume 不再使用，可以用 `docker volume rm deploy_caddy-data deploy_caddy-config` 刪除。
 
 ## 疑難排解
 
 | 現象 | 檢查 |
 |---|---|
-| 瀏覽器連不上、憑證錯誤 | `docker compose logs caddy`。常見原因：DNS 還沒生效、80 / 443 被防火牆擋住 |
-| 網頁登入回 `403 csrf_failed` | 瀏覽器網址與 `SHINSOU_DOMAIN` 不同（例如用 IP 或另一個網域開啟） |
+| 瀏覽器連不上、憑證錯誤 | 先在主機上 `curl http://127.0.0.1:8080/healthz`。有回應就是反向代理或憑證的問題，沒有回應看 `docker compose logs server` |
+| 不斷重新導向 | 代理必須以 HTTP 連到 `127.0.0.1:8080`，不要再經過另一層會把 HTTP 轉成 HTTPS 的代理 |
+| 網頁登入回 `403 csrf_failed` | 瀏覽器網址與 `SHINSOU_PUBLIC_URL` 不同（例如用 IP 或另一個網域開啟），或代理沒有轉送原本的 `Host` 標頭 |
 | `server` 不斷重啟 | `docker compose logs server`。設定錯誤會在啟動時逐項列出 |
 | 找不到設定碼 | 已經有管理員時不會再印。忘記管理員密碼可用另一個管理員重設，或設定寄信後用「忘記密碼」 |
 | App 顯示無法連線 | 用瀏覽器打開 `https://你的網域/.well-known/shinsou`，應回傳一段 JSON |

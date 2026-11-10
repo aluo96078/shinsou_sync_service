@@ -21,7 +21,7 @@ Shinsou X 的開源同步伺服器，任何人都可以自行架設。使用者�
 | `cmd/shinsou-server/` | 伺服器進入點（`serve`、`migrate`、`admin`） |
 | `internal/` | 伺服器實作：`config`、`db`、`auth`、`syncsvc`、`notify`、`jobs`、`httpapi`、`instance`、`mail`、`settings`、`library`、`account`、`admin`、`social`、`reviews`、`markdown` |
 | `web/` | 網頁前台（Vue 3 + Vite + TypeScript）；`npm run build` 輸出到 `web/dist`，由 `web/embed.go` 編進伺服器 |
-| `deploy/` | 部署範本：`docker-compose.yml`（伺服器＋PostgreSQL 16＋Caddy 自動 HTTPS）、`Caddyfile`、`.env.example`、`backup.sh` |
+| `deploy/` | 部署範本：`docker-compose.yml`（伺服器＋PostgreSQL 16；HTTPS 由你自己的反向代理處理）、`.env.example`、`backup.sh` |
 | `docs/deploy/` | 自行架設（`self-hosting.md`）、備份與還原（`backup-restore.md`）、升級（`upgrading.md`） |
 | `docs/postman/` | Postman 測試集合 |
 | `internal/workkey` | 作品鍵參考實作 |
@@ -114,11 +114,11 @@ go test -race ./...
 
 ### 以 Docker Compose 部署
 
-需要一個已指向這台主機的網域，並開放 80 與 443 連接埠；Caddy 會自動申請與續期憑證。
+伺服器只在 `127.0.0.1:8080` 提供 HTTP；網域、HTTPS 與憑證由你自己的反向代理（nginx、Caddy 等）處理。
 
 ```bash
 cd deploy
-cp .env.example .env     # 填入 SHINSOU_DOMAIN 與 POSTGRES_PASSWORD
+cp .env.example .env     # 填入 SHINSOU_PUBLIC_URL 與 POSTGRES_PASSWORD
 docker compose up -d --build
 docker compose logs server | grep setup_code     # 一次性的管理員設定碼
 ```
