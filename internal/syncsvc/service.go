@@ -94,9 +94,9 @@ func (s *Service) Push(ctx context.Context, userID uuid.UUID, req PushRequest) (
 		if err != nil {
 			return err
 		}
-		if *req.Since != 0 && *req.Since < floor {
-			return errResync()
-		}
+		// A replay is answered before the floor check: the batch was already merged, so the
+		// client must get its stored response even if tombstone GC has since raised the floor
+		// past the cursor it sent. Its next pull reports the resync.
 		var stored []byte
 		err = tx.QueryRow(ctx, `select response from sync_batches where user_id = $1 and batch_id = $2`, userID, batchID).Scan(&stored)
 		if err == nil {
@@ -106,6 +106,9 @@ func (s *Service) Push(ctx context.Context, userID uuid.UUID, req PushRequest) (
 		}
 		if !errors.Is(err, pgx.ErrNoRows) {
 			return err
+		}
+		if *req.Since != 0 && *req.Since < floor {
+			return errResync()
 		}
 		limit := s.defaultQuota
 		if quota != nil {

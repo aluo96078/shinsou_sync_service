@@ -465,6 +465,39 @@ func TestTombstoneGCForcesResync(t *testing.T) {
 	}
 }
 
+func TestBatchReplayAfterGCReturnsStoredResponse(t *testing.T) {
+	e := newEnv(t)
+	s := e.register("alice")
+	ctx := context.Background()
+	dev := s.Device.SyncDeviceID
+	now := nowMs()
+	w := mkWork("1")
+	push(e, s.AccessToken, 0, []syncsvc.Work{w}, rec("library", w.Hash, "pinned", true, clock(now, 0, dev))) // seq 1
+
+	// The response to this batch is lost on the way back; the client will retry it verbatim.
+	body := pushBody(1, nil, []syncsvc.PushRecord{rec("setting", "keep", "value", 1, clock(now, 1, dev))}, newBatchID())
+	first := expect[syncsvc.PushResponse](e, 200, "POST", "/api/v1/sync/push", s.AccessToken, body) // seq 2
+
+	push(e, s.AccessToken, 2, nil, tombstone("library", w.Hash, clock(now+10, 0, dev))) // seq 3
+	if n, err := e.jobs.GCTombstones(ctx); err != nil || n != 1 {
+		t.Fatalf("GCTombstones = %d, %v", n, err)
+	}
+
+	// The floor is now 3, above the retried batch's cursor, but the batch was already merged.
+	second := expect[syncsvc.PushResponse](e, 200, "POST", "/api/v1/sync/push", s.AccessToken, body)
+	ja, _ := json.Marshal(first)
+	jb, _ := json.Marshal(second)
+	if !bytes.Equal(ja, jb) {
+		t.Fatalf("replay differs:\n%s\n%s", ja, jb)
+	}
+	// A new batch with the same stale cursor is still refused, and nothing was merged twice.
+	e.expectErr(410, "resync_required", "POST", "/api/v1/sync/push", s.AccessToken,
+		pushBody(1, nil, []syncsvc.PushRecord{rec("setting", "x", "value", 1, clock(now, 2, dev))}, newBatchID()))
+	if full := pull(e, s.AccessToken, 0); len(full.Records) != 1 || full.Records[0].Key != "keep" || full.Records[0].Seq != 2 {
+		t.Fatalf("full pull = %+v", full)
+	}
+}
+
 func TestTombstoneRetentionRespected(t *testing.T) {
 	e := newEnv(t)
 	s := e.register("alice")
