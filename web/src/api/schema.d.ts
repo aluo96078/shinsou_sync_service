@@ -418,7 +418,9 @@ export interface paths {
          * @description Registration for the web front end. Same rules as `/auth/register`; the device is created
          *     with platform `web`. The refresh token is not in the body: it is set as the HttpOnly
          *     cookie `shinsou_refresh` (SameSite=Lax, Path=/api/v1/web), together with the readable
-         *     cookie `shinsou_csrf` (Path=/).
+         *     cookie `shinsou_csrf` (Path=/). The HttpOnly cookie `shinsou_device` (Path=/api/v1/web,
+         *     kept past sign-out) identifies the browser: signing in again from it reuses its device
+         *     instead of adding one, and ends the session the browser held before.
          */
         post: operations["webRegister"];
         delete?: never;
@@ -1473,7 +1475,7 @@ export interface components {
         };
         Hlc: string;
         /** @enum {string} */
-        RecordKind: "library" | "unit" | "progress" | "history" | "category" | "repository" | "setting";
+        RecordKind: "library" | "unit" | "progress" | "history" | "category" | "repository" | "setting" | "package";
         DeletedRegister: {
             value: boolean;
             clock: components["schemas"]["Hlc"];

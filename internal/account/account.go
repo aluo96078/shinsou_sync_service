@@ -20,7 +20,7 @@ import (
 )
 
 // Kinds are the record kinds, in the order the usage report lists them.
-var Kinds = []string{"library", "unit", "progress", "history", "category", "repository", "setting"}
+var Kinds = []string{"library", "unit", "progress", "history", "category", "repository", "setting", "package"}
 
 // Usage is the usage report (Usage in the API).
 type Usage struct {

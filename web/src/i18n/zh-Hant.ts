@@ -222,6 +222,7 @@ export const zhHant = {
   'recordKind.category': '分類',
   'recordKind.repository': '儲存庫',
   'recordKind.setting': '設定',
+  'recordKind.package': '已安裝套件',
 
   'devices.title': '裝置',
   'devices.intro': '這些是登入過你帳號的裝置與瀏覽器。',

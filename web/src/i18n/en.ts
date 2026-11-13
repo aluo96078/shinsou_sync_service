@@ -223,6 +223,7 @@ export const en: Record<MessageKey, string> = {
   'recordKind.category': 'Categories',
   'recordKind.repository': 'Repositories',
   'recordKind.setting': 'Settings',
+  'recordKind.package': 'Installed packages',
 
   'devices.title': 'Devices',
   'devices.intro': 'Devices and browsers that are signed in to your account.',

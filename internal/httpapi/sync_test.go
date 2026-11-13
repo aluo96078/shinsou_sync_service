@@ -112,6 +112,42 @@ func TestSecondDeviceConverges(t *testing.T) {
 	}
 }
 
+// TestPackageRecordSyncsToAnotherDevice pushes an installed package from one device and pulls
+// it on another; package fields are opaque to the server (docs/spec/records.md, kind package).
+func TestPackageRecordSyncsToAnotherDevice(t *testing.T) {
+	e := newEnv(t)
+	a := e.register("alice")
+	b := e.login("alice", "correct horse", "tablet")
+	clk := clock(nowMs(), 0, a.Device.SyncDeviceID)
+	fields := map[string]string{
+		"repositoryUrl":         `"https://repo.example.com/index.json"`,
+		"name":                  `"漫畫櫃"`,
+		"version":               `"1.2.0"`,
+		"versionCode":           `12`,
+		"signingKeyFingerprint": `"ab:cd:ef"`,
+	}
+	r := push(e, a.AccessToken, 0, nil, recRaw("package", "com.example.manhuagui", fields, clk))
+	if r.Results[0].Result != "applied" || r.Results[0].Record == nil || r.Results[0].Record.Work != nil {
+		t.Fatalf("push = %+v", r.Results[0])
+	}
+
+	got := pull(e, b.AccessToken, 0)
+	if len(got.Records) != 1 {
+		t.Fatalf("B should see the package: %+v", got)
+	}
+	p := got.Records[0]
+	if p.Kind != "package" || p.Key != "com.example.manhuagui" || p.Work != nil {
+		t.Fatalf("package record = %+v", p)
+	}
+	for name, raw := range fields {
+		var want, have any
+		_ = json.Unmarshal([]byte(raw), &want)
+		if err := json.Unmarshal(p.Fields[name], &have); err != nil || fmt.Sprint(have) != fmt.Sprint(want) || p.Clocks[name] != clk {
+			t.Fatalf("field %s = %s (clock %s)", name, p.Fields[name], p.Clocks[name])
+		}
+	}
+}
+
 func TestDeleteThenReAddDropsOldFields(t *testing.T) {
 	e := newEnv(t)
 	s := e.register("alice")
@@ -330,6 +366,14 @@ func TestKeyFormats(t *testing.T) {
 		{"setting", "Reader", false},
 		{"setting", "a b", false},
 		{"setting", strings.Repeat("a", 129), false},
+		{"package", "com.example.manhuagui", true},
+		{"package", "Manhua_Gui-2~beta", true},
+		{"package", strings.Repeat("a", 128), true},
+		{"package", "", false},
+		{"package", strings.Repeat("a", 129), false},
+		{"package", "com example", false},
+		{"package", "com/example", false},
+		{"package", "漫畫櫃", false},
 	}
 	for _, tc := range cases {
 		r := push(e, s.AccessToken, 0, []syncsvc.Work{w}, rec(tc.kind, tc.key, "value", 1, c))

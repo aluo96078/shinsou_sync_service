@@ -22,10 +22,10 @@ func TestUsageAndQuotas(t *testing.T) {
 	s := e.register("alice")
 
 	u := expect[usage](e, 200, "GET", "/api/v1/me/usage", s.AccessToken, nil)
-	if u.Total != 0 || u.Quota == nil || *u.Quota != 200000 || len(u.ByKind) != 7 {
+	if u.Total != 0 || u.Quota == nil || *u.Quota != 200000 || len(u.ByKind) != 8 {
 		t.Fatalf("empty usage = %+v", u)
 	}
-	for _, k := range []string{"library", "unit", "progress", "history", "category", "repository", "setting"} {
+	for _, k := range []string{"library", "unit", "progress", "history", "category", "repository", "setting", "package"} {
 		if v, ok := u.ByKind[k]; !ok || v != 0 {
 			t.Fatalf("kind %s missing or non-zero: %+v", k, u.ByKind)
 		}

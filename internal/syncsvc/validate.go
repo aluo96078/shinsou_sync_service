@@ -16,11 +16,12 @@ var (
 	hashRe    = regexp.MustCompile(`^[0-9a-f]{64}$`)
 	uuidRe    = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 	settingRe = regexp.MustCompile(`^[a-z][a-zA-Z0-9.]{0,127}$`)
+	packageRe = regexp.MustCompile(`^[A-Za-z0-9._~-]{1,128}$`)
 )
 
 var kinds = map[string]bool{
 	"library": true, "unit": true, "progress": true, "history": true,
-	"category": true, "repository": true, "setting": true,
+	"category": true, "repository": true, "setting": true, "package": true,
 }
 
 // workKeyed kinds use a work hash or local:<uuid> as their key.
@@ -39,6 +40,8 @@ func validKey(kind, key string) bool {
 			strings.TrimFunc(key, unicode.IsSpace) != ""
 	case "setting":
 		return settingRe.MatchString(key)
+	case "package":
+		return packageRe.MatchString(key)
 	}
 	return false
 }

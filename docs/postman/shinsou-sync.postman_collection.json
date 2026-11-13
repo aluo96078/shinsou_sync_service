@@ -1232,6 +1232,156 @@
           ]
         },
         {
+          "name": "Push installed package",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sync/push",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sync",
+                "push"
+              ],
+              "query": []
+            },
+            "description": "Pushes a package record (docs/spec/records.md, kind package): the key is the package id, the fields describe where and which version was installed. Other devices pre-install it only from repositories they already trust; trust and permission grants are never synced.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"batchId\": \"{{batchId}}\",\n  \"since\": 0,\n  \"records\": [\n    {\n      \"kind\": \"package\",\n      \"key\": \"{{packageId}}\",\n      \"fields\": {\n        \"repositoryUrl\": \"https://repo.example.com/index.json\",\n        \"name\": \"Example package\",\n        \"version\": \"1.2.0\",\n        \"versionCode\": 12,\n        \"signingKeyFingerprint\": \"ab:cd:ef\"\n      },\n      \"clocks\": {\n        \"repositoryUrl\": \"{{clock}}\",\n        \"name\": \"{{clock}}\",\n        \"version\": \"{{clock}}\",\n        \"versionCode\": \"{{clock}}\",\n        \"signingKeyFingerprint\": \"{{clock}}\"\n      }\n    }\n  ]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set('batchId', require('uuid').v4());",
+                  "pm.collectionVariables.set('clock', Date.now() + ':0:' + pm.collectionVariables.get('syncDeviceId'));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const r = pm.response.json().results[0];",
+                  "pm.test('package record applied or unchanged', () => pm.expect(['applied','unchanged']).to.include(r.result));",
+                  "pm.test('package record carries no work', () => pm.expect(r.record && r.record.work).to.be.oneOf([undefined, null]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Push package with invalid key",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sync/push",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sync",
+                "push"
+              ],
+              "query": []
+            },
+            "description": "A package key must match ^[A-Za-z0-9._~-]{1,128}$; anything else is rejected per record.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"batchId\": \"{{batchId}}\",\n  \"since\": 0,\n  \"records\": [\n    {\n      \"kind\": \"package\",\n      \"key\": \"not a package/id\",\n      \"fields\": {\n        \"repositoryUrl\": \"https://repo.example.com/index.json\",\n        \"name\": \"Example package\",\n        \"version\": \"1.2.0\",\n        \"versionCode\": 12,\n        \"signingKeyFingerprint\": \"ab:cd:ef\"\n      },\n      \"clocks\": {\n        \"repositoryUrl\": \"{{clock}}\",\n        \"name\": \"{{clock}}\",\n        \"version\": \"{{clock}}\",\n        \"versionCode\": \"{{clock}}\",\n        \"signingKeyFingerprint\": \"{{clock}}\"\n      }\n    }\n  ]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set('batchId', require('uuid').v4());",
+                  "pm.collectionVariables.set('clock', Date.now() + ':0:' + pm.collectionVariables.get('syncDeviceId'));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('rejected:invalid_key', () => pm.expect(pm.response.json().results[0].result).to.eql('rejected:invalid_key'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Changes include installed package",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sync/changes?since=0&limit=500",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sync",
+                "changes"
+              ],
+              "query": [
+                {
+                  "key": "since",
+                  "value": "0"
+                },
+                {
+                  "key": "limit",
+                  "value": "500"
+                }
+              ]
+            },
+            "description": "Pulls from the start and checks the package record pushed above."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const pkg = pm.response.json().records.find(r => r.kind === 'package' && r.key === pm.collectionVariables.get('packageId'));",
+                  "pm.test('package record present', () => pm.expect(pkg).to.be.an('object'));",
+                  "pm.test('package fields synced', () => pm.expect(pkg.fields.versionCode).to.eql(12));"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "Changes",
           "request": {
             "method": "GET",

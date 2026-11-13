@@ -73,7 +73,7 @@ async function savePassword(): Promise<void> {
 // --- usage -------------------------------------------------------------------------------------
 const usage = ref<Usage | null>(null)
 const usageError = ref<string | null>(null)
-const KINDS = ['library', 'unit', 'progress', 'history', 'category', 'repository', 'setting'] as const
+const KINDS = ['library', 'unit', 'progress', 'history', 'category', 'repository', 'setting', 'package'] as const
 
 onMounted(async () => {
   try {

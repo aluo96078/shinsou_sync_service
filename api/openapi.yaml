@@ -1835,7 +1835,7 @@ components:
 
     RecordKind:
       type: string
-      enum: [library, unit, progress, history, category, repository, setting]
+      enum: [library, unit, progress, history, category, repository, setting, package]
 
     DeletedRegister:
       type: object

@@ -100,7 +100,7 @@ HTTP 介面以 [`api/openapi.yaml`](../../api/openapi.yaml) 為準；本文件�
 
 ## 6. 帳號
 
-- `GET /me/usage`：`total` 是全部記錄數（含墓碑，與配額計算一致）；`quota` 是該帳號的上限（個人設定優先，否則實例預設；不限時為 `null`）；`byKind` 一律列出七種 kind，值為未刪除的筆數。
+- `GET /me/usage`：`total` 是全部記錄數（含墓碑，與配額計算一致）；`quota` 是該帳號的上限（個人設定優先，否則實例預設；不限時為 `null`）；`byKind` 一律列出全部八種 kind，值為未刪除的筆數。
 - `GET /me/export`：在同一個唯讀交易中串流輸出，包含墓碑；`works` 只含這些記錄參照到的作品。
 - `POST /me/delete`：需要目前的密碼。刪除帳號會連帶刪除裝置、權杖與同步記錄；共用的作品描述保留。唯一的啟用中管理員不可刪除自己（`409 last_admin`）。寫入 `audit_log`（`account.delete`，`detail.username`）。
 
